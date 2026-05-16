@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0.3" y2="0.7">
+      <stop offset="0%" stop-color="#22c55e"/>
+      <stop offset="100%" stop-color="#14b8a6"/>
+    </linearGradient>
+  </defs>
+  <path fill="url(#g)" d="M 51,4 C 25,4 4,25 4,51 C 4,77 25,98 51,98 C 67,98 81,90 89,77 L 89,49 L 53,49 L 53,62 L 76,62 C 71,72 62,79 51,79 C 36,79 24,67 24,51 C 24,36 36,23 51,23 C 60,23 67,27 73,33 L 86,22 C 77,11 65,4 51,4 Z"/>
+  <g transform="translate(35 51)" fill="white">
+    <rect x="-1.7" y="-14.5" width="3.4" height="5"/>
+    <rect x="-1.7" y="-14.5" width="3.4" height="5" transform="rotate(45)"/>
+    <rect x="-1.7" y="-14.5" width="3.4" height="5" transform="rotate(90)"/>
+    <rect x="-1.7" y="-14.5" width="3.4" height="5" transform="rotate(135)"/>
+    <rect x="-1.7" y="-14.5" width="3.4" height="5" transform="rotate(180)"/>
+    <rect x="-1.7" y="-14.5" width="3.4" height="5" transform="rotate(225)"/>
+    <rect x="-1.7" y="-14.5" width="3.4" height="5" transform="rotate(270)"/>
+    <rect x="-1.7" y="-14.5" width="3.4" height="5" transform="rotate(315)"/>
+    <circle r="11"/>
+    <circle r="3.6" fill="url(#g)"/>
+  </g>
+</svg>
