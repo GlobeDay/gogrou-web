@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { BrandMark } from "@/components/brand-mark";
+import { Eyebrow } from "@/components/eyebrow";
 import { supabase, TOOL_TYPE_LABELS, type ToolType } from "@/lib/supabase";
 import { Boxes, ScanLine, Warehouse, Brain, ArrowRight, Wrench } from "lucide-react";
 
@@ -80,7 +81,7 @@ export default async function HomePage() {
 
       {/* Quick links */}
       <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">Rychlý přístup</h2>
+        <Eyebrow as="h2" size="sm" className="mb-3">Rychlý přístup</Eyebrow>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {QUICK_LINKS.map(({ href, label, desc, icon: Icon, accent }, i) => (
             <Link
@@ -108,7 +109,7 @@ export default async function HomePage() {
 
       {/* Tool types breakdown */}
       <section>
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">Katalog dle typu</h2>
+        <Eyebrow as="h2" size="sm" className="mb-3">Katalog dle typu</Eyebrow>
         <Card>
           <CardContent className="pt-4">
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
@@ -125,7 +126,7 @@ export default async function HomePage() {
                     >
                       <span className="text-xs text-muted-foreground font-mono truncate" title={t}>{t}</span>
                       <span className="text-lg font-semibold tabular-nums">{n.toLocaleString("cs-CZ")}</span>
-                      <span className="text-[10px] text-muted-foreground/70 truncate">{label}</span>
+                      <span className="text-2xs text-muted-foreground/70 truncate">{label}</span>
                     </Link>
                   );
                 })}
@@ -144,7 +145,7 @@ function MetricCard({
     <Card>
       <CardHeader className="pb-1">
         <div className="flex items-center justify-between">
-          <CardDescription className="text-[11px] uppercase tracking-wide">{label}</CardDescription>
+          <CardDescription className="text-2xs uppercase tracking-wide">{label}</CardDescription>
           <Icon className="h-3.5 w-3.5 text-muted-foreground" />
         </div>
         <CardTitle className="text-3xl tabular-nums">{value}</CardTitle>

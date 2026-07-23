@@ -16,7 +16,7 @@ const sans = IBM_Plex_Sans({
 const mono = IBM_Plex_Mono({
   subsets: ["latin", "latin-ext"],
   weight: ["400", "500", "600"],
-  variable: "--font-geist-mono",
+  variable: "--font-mono",
   display: "swap",
 });
 
@@ -29,8 +29,9 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fafaf9" },
-    { media: "(prefers-color-scheme: dark)",  color: "#0a0a0a" },
+    // Sladěno s --background tokeny v globals.css (oklch → sRGB aproximace)
+    { media: "(prefers-color-scheme: light)", color: "#fbfbf9" },
+    { media: "(prefers-color-scheme: dark)",  color: "#131417" },
   ],
 };
 

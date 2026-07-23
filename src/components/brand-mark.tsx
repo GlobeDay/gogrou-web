@@ -52,7 +52,7 @@ export function BrandMark({ size = 28, className }: { size?: number; className?:
 export function BrandWordmark({ className }: { className?: string }) {
   return (
     <span
-      className={`font-semibold tracking-[0.06em] uppercase text-[0.95rem] ${className ?? ""}`}
+      className={`font-semibold tracking-label uppercase text-[0.95rem] ${className ?? ""}`}
     >
       Gogrou
     </span>

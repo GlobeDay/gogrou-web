@@ -78,7 +78,7 @@ export default async function GinaPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card>
           <CardHeader className="pb-1">
-            <CardDescription className="flex items-center gap-1 text-[10px] uppercase">
+            <CardDescription className="flex items-center gap-1 text-2xs uppercase">
               <Activity className="h-3 w-3" /> Pohyby 7d
             </CardDescription>
             <CardTitle className="text-3xl">{total7}</CardTitle>
@@ -89,7 +89,7 @@ export default async function GinaPage() {
         </Card>
         <Card className={totalAtMax > 0 ? "border-destructive" : ""}>
           <CardHeader className="pb-1">
-            <CardDescription className="flex items-center gap-1 text-[10px] uppercase">
+            <CardDescription className="flex items-center gap-1 text-2xs uppercase">
               <AlertTriangle className="h-3 w-3" /> Na max cycles
             </CardDescription>
             <CardTitle className={`text-3xl ${totalAtMax > 0 ? "text-destructive" : ""}`}>{totalAtMax}</CardTitle>
@@ -98,7 +98,7 @@ export default async function GinaPage() {
         </Card>
         <Card>
           <CardHeader className="pb-1">
-            <CardDescription className="flex items-center gap-1 text-[10px] uppercase">
+            <CardDescription className="flex items-center gap-1 text-2xs uppercase">
               <Wrench className="h-3 w-3" /> Service backlog
             </CardDescription>
             <CardTitle className="text-3xl">{service.length}</CardTitle>
@@ -107,7 +107,7 @@ export default async function GinaPage() {
         </Card>
         <Card>
           <CardHeader className="pb-1">
-            <CardDescription className="flex items-center gap-1 text-[10px] uppercase">
+            <CardDescription className="flex items-center gap-1 text-2xs uppercase">
               <TrendingDown className="h-3 w-3" /> Top konzumováno
             </CardDescription>
             <CardTitle className="text-3xl">{top[0]?.consumed_count ?? 0}×</CardTitle>
@@ -289,7 +289,7 @@ function VelocityChart({ data }: { data: Velocity[] }) {
           );
         })}
       </div>
-      <div className="flex justify-between text-[10px] text-muted-foreground">
+      <div className="flex justify-between text-2xs text-muted-foreground">
         <span>{sortedDays[0]}</span>
         <span>{sortedDays[sortedDays.length - 1]}</span>
       </div>

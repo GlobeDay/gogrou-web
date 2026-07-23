@@ -94,7 +94,7 @@ export function ScanClient({ tenant, role }: { tenant: string; role: Role }) {
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Badge variant="outline" className="font-mono">{tenant}</Badge>
-            {role && <Badge variant="outline" className="uppercase text-[10px]">{role}</Badge>}
+            {role && <Badge variant="outline" className="uppercase text-2xs">{role}</Badge>}
           </div>
         </div>
 
@@ -102,7 +102,7 @@ export function ScanClient({ tenant, role }: { tenant: string; role: Role }) {
         <Card className="border-primary/25">
           <CardContent className="py-8">
             <form onSubmit={onSubmit} className="flex flex-col items-center gap-4">
-              <label htmlFor="dm" className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              <label htmlFor="dm" className="text-xs uppercase tracking-label text-muted-foreground">
                 Naskenuj nebo napiš DM kód
               </label>
               <div className="flex w-full max-w-2xl gap-2">
@@ -171,8 +171,8 @@ function ScanResult({ data, role, onAction, actionPending }: {
         <Card>
           <CardContent className="pt-5 space-y-3">
             <div className="flex items-baseline gap-3 flex-wrap">
-              <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground">Co to je</span>
-              {product && <Badge variant="outline" className="font-mono text-[10px]">{product.type}</Badge>}
+              <span className="text-2xs font-mono uppercase tracking-label text-muted-foreground">Co to je</span>
+              {product && <Badge variant="outline" className="font-mono text-2xs">{product.type}</Badge>}
             </div>
             {product ? (
               <>
@@ -189,7 +189,7 @@ function ScanResult({ data, role, onAction, actionPending }: {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-border/60">
                   {Object.entries(params).slice(0, 9).map(([k, v]) => (
                     <div key={k} className="flex flex-col gap-0.5">
-                      <span className="text-[10px] font-mono uppercase text-muted-foreground/80">{k.replace(/^_/, "")}</span>
+                      <span className="text-2xs font-mono uppercase text-muted-foreground/80">{k.replace(/^_/, "")}</span>
                       <span className="text-sm font-medium truncate" title={String(v)}>{fmtValue(v)}</span>
                     </div>
                   ))}
@@ -202,7 +202,7 @@ function ScanResult({ data, role, onAction, actionPending }: {
         <Card>
           <CardContent className="pt-5 flex items-center justify-between gap-4 flex-wrap">
             <div>
-              <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground block mb-2">Kde je to</span>
+              <span className="text-2xs font-mono uppercase tracking-label text-muted-foreground block mb-2">Kde je to</span>
               <div className="flex items-center gap-3">
                 <StatusBadge status={data.piece.status} showLabel="cs" />
                 <ArrowRight className="h-4 w-4 text-muted-foreground/60" />
@@ -222,7 +222,7 @@ function ScanResult({ data, role, onAction, actionPending }: {
       <Card className={`border-2 ${next.severity === "critical" ? "border-destructive" : next.severity === "warning" ? "border-warning" : "border-info"}`}>
         <CardContent className="pt-5 space-y-3">
           <div className="flex items-start justify-between gap-2">
-            <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground">Co teď udělat</span>
+            <span className="text-2xs font-mono uppercase tracking-label text-muted-foreground">Co teď udělat</span>
             <SeverityBlock s={next.severity} />
           </div>
           <h3 className="text-xl font-semibold leading-tight">{next.title}</h3>
@@ -285,10 +285,10 @@ function ScanResult({ data, role, onAction, actionPending }: {
       {/* Bottom: lifecycle dump */}
       {data.piece.lifecycle && Object.keys(data.piece.lifecycle).length > 0 && (
         <details className="lg:col-span-3 group">
-          <summary className="text-xs uppercase tracking-[0.2em] text-muted-foreground cursor-pointer hover:text-foreground select-none">
+          <summary className="text-xs uppercase tracking-label text-muted-foreground cursor-pointer hover:text-foreground select-none">
             Lifecycle JSONB <span className="opacity-50">(klikni pro detail)</span>
           </summary>
-          <pre className="mt-2 text-[11px] bg-muted/50 border border-border p-3 rounded-md overflow-x-auto font-mono">{JSON.stringify(data.piece.lifecycle, null, 2)}</pre>
+          <pre className="mt-2 text-2xs bg-muted/50 border border-border p-3 rounded-md overflow-x-auto font-mono">{JSON.stringify(data.piece.lifecycle, null, 2)}</pre>
         </details>
       )}
     </div>

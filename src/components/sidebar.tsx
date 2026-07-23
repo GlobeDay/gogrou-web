@@ -4,6 +4,7 @@ import { TenantSwitcher } from "./tenant-switcher";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
 import { BrandLockup } from "./brand-mark";
+import { Eyebrow } from "./eyebrow";
 import { getUserTenants, getActiveTenant } from "@/lib/tenant";
 
 const SECTIONS = [
@@ -49,9 +50,9 @@ export async function Sidebar({ currentPath }: { currentPath: string }) {
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
         {SECTIONS.map((sec) => (
           <div key={sec.label} className="space-y-0.5">
-            <div className="px-2 pb-1 text-[10px] uppercase tracking-[0.12em] text-muted-foreground/70 font-semibold">
+            <Eyebrow className="px-2 pb-1 text-muted-foreground/70">
               {sec.label}
-            </div>
+            </Eyebrow>
             {sec.items.map((it) => {
               const active = currentPath === it.match || currentPath.startsWith(it.match + "/") ||
                              (it.match === "/gss/items" && currentPath.startsWith("/gss/item/"));

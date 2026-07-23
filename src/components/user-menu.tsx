@@ -25,7 +25,7 @@ export async function UserMenu() {
     <form action={signOut} className="flex items-center gap-2">
       <div className="hidden sm:flex items-center gap-2">
         <span
-          className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-[10px] font-semibold text-primary"
+          className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-2xs font-semibold text-primary"
           title={user.email ?? undefined}
           aria-label={`Přihlášen jako ${user.email}`}
         >

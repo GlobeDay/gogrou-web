@@ -88,7 +88,7 @@ export default async function ItemDetailPage({ params }: { params: Params }) {
         {["in_stock", "in_machine", "in_preset", "in_service", "in_production", "scrapped"].map((s) => (
           <Card key={s} className={s === "in_stock" && isLowStock ? "border-destructive" : ""}>
             <CardHeader className="pb-1">
-              <CardDescription className="text-[10px] uppercase tracking-wide">{STATUS_LABELS[s]}</CardDescription>
+              <CardDescription className="text-2xs uppercase tracking-wide">{STATUS_LABELS[s]}</CardDescription>
               <CardTitle className={`text-2xl ${s === "in_stock" && isLowStock ? "text-destructive" : ""}`}>{counts[s] ?? 0}</CardTitle>
             </CardHeader>
           </Card>

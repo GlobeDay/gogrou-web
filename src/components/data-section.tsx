@@ -3,6 +3,7 @@
  * Konzistentní spacing napříč stránkami.
  */
 import { Card, CardContent } from "@/components/ui/card";
+import { Eyebrow } from "@/components/eyebrow";
 
 export function DataSection({
   title,
@@ -21,7 +22,7 @@ export function DataSection({
     <section className="space-y-2">
       <div className="flex items-baseline justify-between gap-3 flex-wrap">
         <div>
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">{title}</h2>
+          <Eyebrow as="h2" size="sm">{title}</Eyebrow>
           {description && <p className="text-xs text-muted-foreground/80 mt-0.5">{description}</p>}
         </div>
         {action}

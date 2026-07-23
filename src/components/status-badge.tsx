@@ -1,4 +1,5 @@
-import { Circle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 type Variant = "success" | "info" | "warning" | "destructive" | "neutral";
 
@@ -45,14 +46,6 @@ const STATUS_LABEL_CS: Record<string, string> = {
   adjust:        "Korekce",
 };
 
-const VARIANT_CLASSES: Record<Variant, string> = {
-  success:     "bg-success/12 text-success border-success/30",
-  info:        "bg-info/12 text-info border-info/30",
-  warning:     "bg-warning/15 text-warning-foreground border-warning/40 dark:text-warning",
-  destructive: "bg-destructive/12 text-destructive border-destructive/30",
-  neutral:     "bg-muted text-muted-foreground border-border",
-};
-
 export function StatusBadge({
   status,
   showDot = true,
@@ -72,12 +65,9 @@ export function StatusBadge({
     /* both */            (cs ? `${cs}` : status);
 
   return (
-    <span
-      className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium ${VARIANT_CLASSES[variant]} ${className ?? ""}`}
-      title={status}
-    >
-      {showDot && <Circle className="h-1.5 w-1.5 fill-current shrink-0" />}
+    <Badge variant={variant} title={status} className={cn("gap-1", className)}>
+      {showDot && <span className="size-1.5 rounded-full bg-current shrink-0" aria-hidden />}
       <span className="font-mono leading-none">{label}</span>
-    </span>
+    </Badge>
   );
 }

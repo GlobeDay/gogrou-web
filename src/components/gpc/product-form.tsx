@@ -188,7 +188,7 @@ function ParamField({ def, value }: { def: ParamDef; value: unknown }) {
       </Label>
       <Input id={name} name={name} type={inputType} step={inputType === "number" ? "any" : undefined}
         className="mt-1" placeholder={placeholder} defaultValue={strVal} required={def.required} />
-      <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{def.param_code}</p>
+      <p className="text-2xs text-muted-foreground font-mono mt-0.5">{def.param_code}</p>
     </div>
   );
 }

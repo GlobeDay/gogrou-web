@@ -45,7 +45,7 @@ export function TenantSwitcher({ tenants, active }: { tenants: UserTenant[]; act
           <SelectItem key={t.tenant_id} value={t.prefix}>
             <div className="flex flex-col">
               <span className="font-mono text-xs">{t.prefix}</span>
-              <span className="text-[10px] opacity-60">{t.name} · {t.role}</span>
+              <span className="text-2xs opacity-60">{t.name} · {t.role}</span>
             </div>
           </SelectItem>
         ))}

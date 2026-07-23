@@ -19,6 +19,16 @@ const badgeVariants = cva(
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
         link: "text-primary underline-offset-4 hover:underline",
+        // Sémantické tinted varianty — sdílené se StatusBadge. Tint /12 + border /30;
+        // warning je záměrně těžší (/15 + /40), žlutá potřebuje víc presence.
+        success:
+          "bg-success/12 text-success border-success/30 [a]:hover:bg-success/20",
+        info:
+          "bg-info/12 text-info border-info/30 [a]:hover:bg-info/20",
+        warning:
+          "bg-warning/15 text-warning-foreground border-warning/40 dark:text-warning [a]:hover:bg-warning/25",
+        neutral:
+          "bg-muted text-muted-foreground border-border [a]:hover:bg-muted/80",
       },
     },
     defaultVariants: {
