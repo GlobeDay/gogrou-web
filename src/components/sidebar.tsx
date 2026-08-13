@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Boxes, ScanLine, Warehouse, Package, History, Upload, Brain, Settings2 } from "lucide-react";
+import { Boxes, ScanLine, Warehouse, Package, History, Upload, Brain, Handshake, Settings2 } from "lucide-react";
 import { TenantSwitcher } from "./tenant-switcher";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
@@ -7,27 +7,38 @@ import { BrandLockup } from "./brand-mark";
 import { Eyebrow } from "./eyebrow";
 import { getUserTenants, getActiveTenant } from "@/lib/tenant";
 
+/** Navigace členěná podle modulů platformy: GPC · GSS · SmartSplit · GINA. */
 const SECTIONS = [
   {
-    label: "Catalog",
+    label: "GPC",
+    hint: "Product Center",
     items: [
       { href: "/gpc", label: "Produkty", icon: Boxes, match: "/gpc" },
     ],
   },
   {
-    label: "Operations",
+    label: "GSS",
+    hint: "Stock System",
     items: [
       { href: "/gss/scan",      label: "DM Scan",        icon: ScanLine,  match: "/gss/scan" },
       { href: "/gss/items",     label: "Skladové karty", icon: Package,   match: "/gss/items" },
       { href: "/gss/import",    label: "Import DM",      icon: Upload,    match: "/gss/import" },
       { href: "/gss/low-stock", label: "Reorder",        icon: Warehouse, match: "/gss/low-stock" },
+      { href: "/gss/audit",     label: "Audit",          icon: History,   match: "/gss/audit" },
     ],
   },
   {
-    label: "Insights",
+    label: "SmartSplit",
+    hint: "Skupinové nákupy",
     items: [
-      { href: "/gina",      label: "GINA",     icon: Brain,   match: "/gina" },
-      { href: "/gss/audit", label: "Audit",    icon: History, match: "/gss/audit" },
+      { href: "/ss", label: "Kampaně", icon: Handshake, match: "/ss" },
+    ],
+  },
+  {
+    label: "GINA",
+    hint: "AI Insights",
+    items: [
+      { href: "/gina", label: "Přehledy", icon: Brain, match: "/gina" },
     ],
   },
 ];
@@ -50,9 +61,10 @@ export async function Sidebar({ currentPath }: { currentPath: string }) {
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
         {SECTIONS.map((sec) => (
           <div key={sec.label} className="space-y-0.5">
-            <Eyebrow className="px-2 pb-1 text-muted-foreground/70">
-              {sec.label}
-            </Eyebrow>
+            <div className="flex items-baseline gap-1.5 px-2 pb-1">
+              <Eyebrow className="text-foreground/80">{sec.label}</Eyebrow>
+              <span className="text-2xs text-muted-foreground/60">{sec.hint}</span>
+            </div>
             {sec.items.map((it) => {
               const active = currentPath === it.match || currentPath.startsWith(it.match + "/") ||
                              (it.match === "/gss/items" && currentPath.startsWith("/gss/item/"));

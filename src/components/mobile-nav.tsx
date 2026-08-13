@@ -3,17 +3,19 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Boxes, ScanLine, Warehouse, Package, History, Upload, Brain, Menu, X } from "lucide-react";
+import { Boxes, ScanLine, Warehouse, Package, History, Upload, Brain, Handshake, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
+/** Pořadí kopíruje modulové členění: GPC · GSS · SmartSplit · GINA. */
 const LINKS = [
-  { href: "/gpc",           label: "Produkty",       icon: Boxes },
+  { href: "/gpc",           label: "GPC",            icon: Boxes },
   { href: "/gss/scan",      label: "DM Scan",        icon: ScanLine },
   { href: "/gss/items",     label: "Skladové karty", icon: Package },
   { href: "/gss/import",    label: "Import DM",      icon: Upload },
   { href: "/gss/low-stock", label: "Reorder",        icon: Warehouse },
-  { href: "/gina",          label: "GINA",           icon: Brain },
   { href: "/gss/audit",     label: "Audit",          icon: History },
+  { href: "/ss",            label: "SmartSplit",     icon: Handshake },
+  { href: "/gina",          label: "GINA",           icon: Brain },
 ];
 
 export function MobileNav() {
