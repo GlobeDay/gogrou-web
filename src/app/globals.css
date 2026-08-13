@@ -9,7 +9,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-condensed);
   /* Micro type step + label tracking — tokeny pro eyebrow/caption labely */
   --text-2xs: 0.6875rem;          /* 11px */
   --text-2xs--line-height: 1rem;  /* 16px */
@@ -61,122 +61,123 @@
 }
 
 /* ============================================================
-   GOGROU — industrial design tokens
-   Accent: industrial orange (Walter-inspired)
-   Light: warm-neutral background, deep slate ink
-   Dark:  near-black with warm neutral text
+   GOGROU — theme: INDUSTRY (blueprint / wireframe)
+   Zdroj hodnot: industry-design-system/tokens.css
+   Accent: steel blue #5980a6 · ground: light technical gray
+   Vše hranaté (radius 0), hairline bordery (16% ink).
+   Sémantické barvy (success/warning/destructive) jsou ztlumená
+   funkční odchylka od mono schématu — skladové stavy je potřebují.
    ============================================================ */
 
 :root {
-  /* Warm neutral, not pure white — méně sterilní pro průmyslový kontext */
-  --background:       oklch(0.992 0.003 80);
-  --foreground:       oklch(0.18 0.012 260);
+  /* Light technical ground + ink */
+  --background:       #f2f2f3;
+  --foreground:       #1d1f20;
 
-  --card:             oklch(1 0 0);
-  --card-foreground:  oklch(0.18 0.012 260);
+  /* Karty = line drawings: stejná plocha jako ground, kreslí je border */
+  --card:             #f2f2f3;
+  --card-foreground:  #1d1f20;
 
-  --popover:          oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.012 260);
+  --popover:          #f5f5f8;   /* neutral-100 */
+  --popover-foreground: #1d1f20;
 
-  /* Industrial orange — Walter family. oklch sat + L pro AA kontrast s bílým fg */
-  --primary:              oklch(0.62 0.17 48);
-  --primary-foreground:   oklch(0.99 0 0);
+  /* Steel accent — jediná plná barva systému */
+  --primary:              #5980a6;
+  --primary-foreground:   #ffffff;
 
-  /* Secondary = warm gray surface */
-  --secondary:            oklch(0.965 0.006 80);
-  --secondary-foreground: oklch(0.22 0.012 260);
+  --secondary:            #e9e9ea;   /* surface */
+  --secondary-foreground: #1d1f20;
 
-  --muted:                oklch(0.965 0.006 80);
-  --muted-foreground:     oklch(0.5 0.015 260);
+  --muted:                #e7e7ea;   /* neutral-200 */
+  --muted-foreground:     #5d5d60;   /* neutral-700 */
 
-  --accent:               oklch(0.95 0.012 50);  /* light orange tint hover */
-  --accent-foreground:    oklch(0.22 0.012 260);
+  --accent:               #eef6ff;   /* accent-100 hover tint */
+  --accent-foreground:    #1d1f20;
 
-  --destructive:          oklch(0.58 0.22 27);
+  --destructive:          oklch(0.55 0.12 27);
 
-  /* Borders / inputs — chladnější slate-tone, ať se odpíchnou od teplé bg */
-  --border:               oklch(0.91 0.008 260);
-  --input:                oklch(0.91 0.008 260);
-  --ring:                 oklch(0.62 0.17 48);
+  /* Hairline — 16% ink, dle tokens.css --color-divider */
+  --border:               color-mix(in srgb, #1d1f20 16%, transparent);
+  --input:                color-mix(in srgb, #1d1f20 16%, transparent);
+  --ring:                 #5980a6;
 
-  /* Semantic */
-  --success:              oklch(0.55 0.16 155);
-  --success-foreground:   oklch(0.99 0 0);
-  --warning:              oklch(0.7 0.16 80);
-  --warning-foreground:   oklch(0.2 0.02 80);
-  --info:                 oklch(0.55 0.15 240);
-  --info-foreground:      oklch(0.99 0 0);
+  /* Semantic — nízká chroma, ať drží technické schéma */
+  --success:              oklch(0.55 0.09 155);
+  --success-foreground:   #ffffff;
+  --warning:              oklch(0.72 0.1 85);
+  --warning-foreground:   #1d1f20;
+  --info:                 #416180;   /* accent-700 */
+  --info-foreground:      #ffffff;
 
-  /* Charts — industrial palette ladená s primary */
-  --chart-1: oklch(0.62 0.17 48);   /* primary orange */
-  --chart-2: oklch(0.55 0.15 240);  /* steel blue */
-  --chart-3: oklch(0.55 0.16 155);  /* shop green */
-  --chart-4: oklch(0.7 0.16 80);    /* amber */
-  --chart-5: oklch(0.5 0.012 260);  /* slate */
+  /* Charts — accent ramp + neutrály */
+  --chart-1: #5980a6;
+  --chart-2: #94bce3;   /* accent-400 */
+  --chart-3: #416180;   /* accent-700 */
+  --chart-4: #98989b;   /* neutral-500 */
+  --chart-5: #2b2b2d;   /* neutral-900 */
 
-  --radius:   0.5rem;
+  --radius:   0rem;     /* everything is square */
 
-  --sidebar:                 oklch(0.985 0.006 80);
-  --sidebar-foreground:      oklch(0.18 0.012 260);
-  --sidebar-primary:         oklch(0.62 0.17 48);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent:          oklch(0.95 0.012 50);
-  --sidebar-accent-foreground: oklch(0.22 0.012 260);
-  --sidebar-border:          oklch(0.91 0.008 260);
-  --sidebar-ring:            oklch(0.62 0.17 48);
+  --sidebar:                 #e9e9ea;
+  --sidebar-foreground:      #1d1f20;
+  --sidebar-primary:         #5980a6;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent:          #eef6ff;
+  --sidebar-accent-foreground: #1d1f20;
+  --sidebar-border:          color-mix(in srgb, #1d1f20 16%, transparent);
+  --sidebar-ring:            #5980a6;
 }
 
 .dark {
-  /* Cooler near-black with subtle blue undertone — looks industrial, nestresuje oči */
-  --background:       oklch(0.14 0.008 260);
-  --foreground:       oklch(0.96 0.006 80);
+  /* Industry dark — ink ground z neutral rampy, jasnější steel pro kontrast */
+  --background:       #1d1f20;
+  --foreground:       #f2f2f3;
 
-  --card:             oklch(0.17 0.008 260);
-  --card-foreground:  oklch(0.96 0.006 80);
+  --card:             #1d1f20;   /* line drawings i v dark — kreslí je border */
+  --card-foreground:  #f2f2f3;
 
-  --popover:          oklch(0.17 0.008 260);
-  --popover-foreground: oklch(0.96 0.006 80);
+  --popover:          #2b2b2d;   /* neutral-900 */
+  --popover-foreground: #f2f2f3;
 
-  /* Brighter orange v dark mode pro perceived contrast */
-  --primary:              oklch(0.7 0.17 50);
-  --primary-foreground:   oklch(0.15 0.01 260);
+  --primary:              #749dc4;   /* accent-500 */
+  --primary-foreground:   #10161c;
 
-  --secondary:            oklch(0.22 0.008 260);
-  --secondary-foreground: oklch(0.96 0.006 80);
+  --secondary:            #2b2b2d;
+  --secondary-foreground: #f2f2f3;
 
-  --muted:                oklch(0.22 0.008 260);
-  --muted-foreground:     oklch(0.68 0.012 260);
+  --muted:                #2b2b2d;
+  --muted-foreground:     #b7b7ba;   /* neutral-400 */
 
-  --accent:               oklch(0.28 0.04 50);   /* dim orange hover */
-  --accent-foreground:    oklch(0.96 0.006 80);
+  --accent:               #2c455d;   /* accent-800 hover */
+  --accent-foreground:    #f2f2f3;
 
-  --destructive:          oklch(0.7 0.19 25);
+  --destructive:          oklch(0.68 0.14 25);
 
-  --border:               oklch(1 0 0 / 12%);
-  --input:                oklch(1 0 0 / 15%);
-  --ring:                 oklch(0.7 0.17 50);
+  --border:               color-mix(in srgb, #f5f5f8 14%, transparent);
+  --input:                color-mix(in srgb, #f5f5f8 16%, transparent);
+  --ring:                 #749dc4;
 
-  --success:              oklch(0.65 0.16 155);
-  --success-foreground:   oklch(0.12 0.01 155);
-  --warning:              oklch(0.78 0.16 85);
-  --warning-foreground:   oklch(0.15 0.02 85);
-  --info:                 oklch(0.65 0.15 240);
-  --info-foreground:      oklch(0.12 0.02 240);
+  --success:              oklch(0.65 0.09 155);
+  --success-foreground:   #0f1511;
+  --warning:              oklch(0.78 0.1 85);
+  --warning-foreground:   #1a1508;
+  --info:                 #94bce3;   /* accent-400 */
+  --info-foreground:      #10161c;
 
-  --chart-1: oklch(0.7 0.17 50);
-  --chart-2: oklch(0.65 0.15 240);
-  --chart-3: oklch(0.65 0.16 155);
-  --chart-4: oklch(0.78 0.16 85);
-  --chart-5: oklch(0.68 0.012 260);
+  --chart-1: #749dc4;
+  --chart-2: #94bce3;
+  --chart-3: #486077;
+  --chart-4: #98989b;
+  --chart-5: #d4d4d7;
 
-  --sidebar:                 oklch(0.16 0.008 260);
-  --sidebar-foreground:      oklch(0.96 0.006 80);
-  --sidebar-primary:         oklch(0.7 0.17 50);
-  --sidebar-primary-foreground: oklch(0.15 0.01 260);
-  --sidebar-accent:          oklch(0.28 0.04 50);
-  --sidebar-accent-foreground: oklch(0.96 0.006 80);
-  --sidebar-border:          oklch(1 0 0 / 12%);
-  --sidebar-ring:            oklch(0.7 0.17 50);
+  --sidebar:                 #232526;
+  --sidebar-foreground:      #f2f2f3;
+  --sidebar-primary:         #749dc4;
+  --sidebar-primary-foreground: #10161c;
+  --sidebar-accent:          #2c455d;
+  --sidebar-accent-foreground: #f2f2f3;
+  --sidebar-border:          color-mix(in srgb, #f5f5f8 14%, transparent);
+  --sidebar-ring:            #749dc4;
 }
 
 /* ============================================================
@@ -186,13 +187,13 @@
    ============================================================ */
 [data-mode="shopfloor"] {
   /* Extra hi-contrast verze tokenů — pro shopfloor osvětlení */
-  --background:       oklch(0.1 0.006 260);
-  --foreground:       oklch(0.99 0.004 80);
-  --card:             oklch(0.13 0.006 260);
-  --muted:            oklch(0.18 0.006 260);
-  --muted-foreground: oklch(0.78 0.01 260);
-  --primary:          oklch(0.78 0.18 55);  /* jasná oranžová */
-  --border:           oklch(1 0 0 / 18%);
+  --background:       #101112;
+  --foreground:       #f5f5f8;
+  --card:             #1a1c1d;
+  --muted:            #232526;
+  --muted-foreground: #b7b7ba;
+  --primary:          #94bce3;  /* jasný steel (accent-400) */
+  --border:           color-mix(in srgb, #f5f5f8 20%, transparent);
 }
 
 @layer base {
@@ -206,10 +207,11 @@
   body {
     @apply bg-background text-foreground;
   }
-  /* Slightly tighter headings */
+  /* Industry: nadpisy v Barlow Condensed 600 — bez negativního trackingu */
   h1, h2, h3, h4 {
-    @apply tracking-tight;
-    letter-spacing: -0.015em;
+    font-family: var(--font-heading);
+    font-weight: 600;
+    letter-spacing: 0;
   }
   /* Mono fonty pro technické identifikátory: slashed zero (0/O v part numbers, DM kódech) */
   code, kbd, .font-mono {
@@ -253,5 +255,11 @@
   .dm-input {
     @apply font-mono text-2xl tracking-wider;
     font-feature-settings: "zero";
+  }
+  /* Industry: labely tlačítek v Barlow Condensed (non-negotiable #6) */
+  [data-slot="button"] {
+    font-family: var(--font-heading);
+    font-weight: 600;
+    letter-spacing: 0.02em;
   }
 }

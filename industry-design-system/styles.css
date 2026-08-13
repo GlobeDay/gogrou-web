@@ -1,0 +1,4 @@
+/* Industry design system — single entry point.
+   <link rel="stylesheet" href="styles.css">  (or @import in your app CSS) */
+@import url('./tokens.css');
+@import url('./components.css');
