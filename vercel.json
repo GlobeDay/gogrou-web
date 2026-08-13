@@ -2,18 +2,6 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "regions": ["fra1"],
-  "env": {
-    "NEXT_PUBLIC_SUPABASE_URL": "https://wmvpcpkphhpyiiqsqvmh.supabase.co",
-    "NEXT_PUBLIC_SUPABASE_KEY": "sb_publishable_t-zM40PkSG7eGb0qiQi1VA_z23-jDTl",
-    "NEXT_PUBLIC_DEFAULT_TENANT": "DEV01"
-  },
-  "build": {
-    "env": {
-      "NEXT_PUBLIC_SUPABASE_URL": "https://wmvpcpkphhpyiiqsqvmh.supabase.co",
-      "NEXT_PUBLIC_SUPABASE_KEY": "sb_publishable_t-zM40PkSG7eGb0qiQi1VA_z23-jDTl",
-      "NEXT_PUBLIC_DEFAULT_TENANT": "DEV01"
-    }
-  },
   "headers": [
     {
       "source": "/(.*)",
