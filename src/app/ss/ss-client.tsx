@@ -4,7 +4,7 @@ import { useState } from "react";
 import {
   Handshake, Users, CalendarClock, BadgePercent, PiggyBank, ArrowRight, Boxes, CircleCheck,
 } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BlueprintCorners, Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -297,8 +297,11 @@ function VariantHero() {
   return (
     <div className="space-y-6">
       {/* Hero */}
-      <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/12 via-background to-background p-6 lg:p-8">
-        <BadgePercent className="absolute -right-6 -top-6 h-40 w-40 text-primary/10" aria-hidden />
+      <div className="blueprint relative rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/12 via-background to-background p-6 lg:p-8">
+        <BlueprintCorners />
+        <div className="absolute inset-0 overflow-hidden" aria-hidden>
+          <BadgePercent className="absolute -right-6 -top-6 h-40 w-40 text-primary/10" />
+        </div>
         <Eyebrow className="text-primary">SmartSplit pool</Eyebrow>
         <div className="mt-2 text-3xl lg:text-4xl font-bold tracking-tight tabular-nums">
           {fmtCzk(agg.savings)}
