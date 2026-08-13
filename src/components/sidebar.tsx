@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Boxes, ScanLine, Warehouse, Package, History, Upload, Brain, Settings2 } from "lucide-react";
+import { Boxes, ScanLine, Warehouse, Package, History, Upload, Brain, Handshake, Settings2 } from "lucide-react";
 import { TenantSwitcher } from "./tenant-switcher";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
@@ -21,6 +21,12 @@ const SECTIONS = [
       { href: "/gss/items",     label: "Skladové karty", icon: Package,   match: "/gss/items" },
       { href: "/gss/import",    label: "Import DM",      icon: Upload,    match: "/gss/import" },
       { href: "/gss/low-stock", label: "Reorder",        icon: Warehouse, match: "/gss/low-stock" },
+    ],
+  },
+  {
+    label: "Purchasing",
+    items: [
+      { href: "/ss", label: "SmartSplit", icon: Handshake, match: "/ss" },
     ],
   },
   {

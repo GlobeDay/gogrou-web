@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { BrandMark } from "@/components/brand-mark";
 import { Eyebrow } from "@/components/eyebrow";
 import { supabase, TOOL_TYPE_LABELS, type ToolType } from "@/lib/supabase";
-import { Boxes, ScanLine, Warehouse, Brain, ArrowRight, Wrench } from "lucide-react";
+import { Boxes, ScanLine, Warehouse, Brain, Handshake, ArrowRight, Wrench } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +29,7 @@ const QUICK_LINKS = [
   { href: "/gpc",           label: "GPC katalog", desc: "Hledat produkty", icon: Boxes,     accent: "text-primary" },
   { href: "/gss/scan",      label: "DM Scan",     desc: "Skenovat kus",    icon: ScanLine,  accent: "text-primary" },
   { href: "/gss/low-stock", label: "Reorder",     desc: "Co dochází",      icon: Warehouse, accent: "text-warning" },
+  { href: "/ss",            label: "SmartSplit",  desc: "Skupinové nákupy", icon: Handshake, accent: "text-success" },
   { href: "/gina",          label: "GINA",        desc: "AI insights",     icon: Brain,     accent: "text-info" },
 ];
 
@@ -82,7 +83,7 @@ export default async function HomePage() {
       {/* Quick links */}
       <section>
         <Eyebrow as="h2" size="sm" className="mb-3">Rychlý přístup</Eyebrow>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {QUICK_LINKS.map(({ href, label, desc, icon: Icon, accent }, i) => (
             <Link
               key={href}

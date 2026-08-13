@@ -12,6 +12,8 @@ const PUBLIC_ROUTES = ["/", "/login", "/signup", "/forgot-password", "/manifest.
 const isPublic = (path: string) =>
   PUBLIC_ROUTES.includes(path)
   || path.startsWith("/gpc")
+  || path.startsWith("/ss") // SmartSplit demo — veřejné pro review grafiky
+
   || path.startsWith("/auth/")
   || path.startsWith("/_next")
   || path.startsWith("/api")
