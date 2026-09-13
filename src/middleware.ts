@@ -8,7 +8,7 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
  *  - Propaguje `x-pathname` na request headers → root layout podle ní vybírá shell variant.
  */
 
-const PUBLIC_ROUTES = ["/", "/login", "/signup", "/forgot-password", "/manifest.webmanifest"];
+const PUBLIC_ROUTES = ["/", "/login", "/signup", "/register", "/forgot-password", "/manifest.webmanifest"];
 const isPublic = (path: string) =>
   PUBLIC_ROUTES.includes(path)
   || path.startsWith("/gpc")

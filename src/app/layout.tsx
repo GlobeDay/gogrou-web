@@ -46,6 +46,7 @@ export const viewport: Viewport = {
 function pickShell(pathname: string): "sidebar" | "scan" | "bare" {
   if (pathname.startsWith("/login")
    || pathname.startsWith("/signup")
+   || pathname.startsWith("/register")
    || pathname.startsWith("/forgot-password")
    || pathname.startsWith("/update-password")
    || pathname.startsWith("/auth/")) return "bare";

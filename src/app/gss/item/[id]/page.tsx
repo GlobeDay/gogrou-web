@@ -11,6 +11,7 @@ import { can } from "@/lib/tenant";
 import { fmtDate } from "@/lib/format";
 import { StatusBadge } from "@/components/status-badge";
 import { ItemStockActions } from "./item-stock-actions";
+import { ItemSettings } from "./item-settings";
 
 type Params = Promise<{ id: string }>;
 
@@ -117,7 +118,15 @@ export default async function ItemDetailPage({ params }: { params: Params }) {
           <span>Min: <span className="font-mono">{item.min_qty ?? "—"}</span></span>
           <span>Reorder point: <span className={`font-mono ${isLowStock ? "text-destructive font-bold" : ""}`}>{item.reorder_point ?? "—"}</span></span>
           <span>Max: <span className="font-mono">{item.max_qty ?? "—"}</span></span>
-          {item.notes && <span className="text-muted-foreground">📝 {item.notes}</span>}
+          {item.notes && <span className="text-muted-foreground">{item.notes}</span>}
+          <ItemSettings
+            itemId={id}
+            min_qty={item.min_qty}
+            max_qty={item.max_qty}
+            reorder_point={item.reorder_point}
+            notes={item.notes}
+            canAct={canAct}
+          />
         </CardContent>
       </Card>
 

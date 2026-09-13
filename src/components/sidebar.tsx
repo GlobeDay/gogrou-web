@@ -1,11 +1,11 @@
 import Link from "next/link";
-import { Boxes, ScanLine, Warehouse, Package, History, Upload, Brain, Handshake, Settings2 } from "lucide-react";
+import { Boxes, ScanLine, Warehouse, Package, History, Upload, Brain, Handshake, Settings2, Keyboard } from "lucide-react";
 import { TenantSwitcher } from "./tenant-switcher";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
 import { BrandLockup } from "./brand-mark";
 import { Eyebrow } from "./eyebrow";
-import { getUserTenants, getActiveTenant } from "@/lib/tenant";
+import { getUserTenants, getActiveTenant, isGlobalAdmin } from "@/lib/tenant";
 
 /** Navigace členěná podle modulů platformy: GPC · GSS · SmartSplit · GINA. */
 const SECTIONS = [
@@ -20,6 +20,7 @@ const SECTIONS = [
     label: "GSS",
     hint: "Stock System",
     items: [
+      { href: "/gss/terminal",  label: "Terminál",       icon: Keyboard,  match: "/gss/terminal" },
       { href: "/gss/scan",      label: "DM Scan",        icon: ScanLine,  match: "/gss/scan" },
       { href: "/gss/items",     label: "Skladové karty", icon: Package,   match: "/gss/items" },
       { href: "/gss/import",    label: "Import DM",      icon: Upload,    match: "/gss/import" },
@@ -44,7 +45,7 @@ const SECTIONS = [
 ];
 
 export async function Sidebar({ currentPath }: { currentPath: string }) {
-  const [tenants, active] = await Promise.all([getUserTenants(), getActiveTenant()]);
+  const [tenants, active, admin] = await Promise.all([getUserTenants(), getActiveTenant(), isGlobalAdmin()]);
 
   return (
     <aside className="hidden lg:flex w-60 shrink-0 flex-col border-r border-border/60 bg-card/30 sticky top-0 h-screen">
@@ -59,6 +60,26 @@ export async function Sidebar({ currentPath }: { currentPath: string }) {
 
       {/* Nav sections */}
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
+        {admin && (
+          <div className="space-y-0.5">
+            <div className="flex items-baseline gap-1.5 px-2 pb-1">
+              <Eyebrow className="text-foreground/80">Admin</Eyebrow>
+            </div>
+            <Link
+              href="/admin/organizations"
+              aria-current={currentPath.startsWith("/admin") ? "page" : undefined}
+              className={
+                "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors " +
+                (currentPath.startsWith("/admin")
+                  ? "bg-primary/10 text-primary font-medium"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground")
+              }
+            >
+              <Settings2 className="h-4 w-4" />
+              Organizace
+            </Link>
+          </div>
+        )}
         {SECTIONS.map((sec) => (
           <div key={sec.label} className="space-y-0.5">
             <div className="flex items-baseline gap-1.5 px-2 pb-1">
