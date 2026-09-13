@@ -2,9 +2,22 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+/** Industry: čtyři registrační křížky „+" — podpis blueprint rámu. */
+function BlueprintCorners() {
+  return (
+    <>
+      <i aria-hidden className="corner tl" />
+      <i aria-hidden className="corner tr" />
+      <i aria-hidden className="corner bl" />
+      <i aria-hidden className="corner br" />
+    </>
+  )
+}
+
 function Card({
   className,
   size = "default",
+  children,
   ...props
 }: React.ComponentProps<"div"> & { size?: "default" | "sm" }) {
   return (
@@ -12,11 +25,15 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        "group/card flex flex-col gap-4 overflow-hidden rounded-xl bg-card py-4 text-sm text-card-foreground ring-1 ring-foreground/10 has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-3 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
+        // Industry: blueprint rám — overflow-visible (křížky se kreslí vně boxu), hairline ring z --border
+        "blueprint group/card flex flex-col gap-4 rounded-xl bg-card py-4 text-sm text-card-foreground ring-1 ring-border has-data-[slot=card-footer]:pb-0 has-[>img:first-child]:pt-0 data-[size=sm]:gap-3 data-[size=sm]:py-3 data-[size=sm]:has-data-[slot=card-footer]:pb-0 *:[img:first-child]:rounded-t-xl *:[img:last-child]:rounded-b-xl",
         className
       )}
       {...props}
-    />
+    >
+      <BlueprintCorners />
+      {children}
+    </div>
   )
 }
 
@@ -93,6 +110,7 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
 }
 
 export {
+  BlueprintCorners,
   Card,
   CardHeader,
   CardFooter,

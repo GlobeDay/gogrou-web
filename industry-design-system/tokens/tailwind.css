@@ -1,0 +1,28 @@
+/* Industry — Tailwind v4 theme mapping. Import AFTER tailwindcss and after
+   ../tokens.css so the values below resolve from the CSS variables.
+     @import "tailwindcss";
+     @import "./industry-design-system/tokens.css";
+     @import "./industry-design-system/tokens/tailwind.css";
+   For Tailwind v3, port these into theme.extend in tailwind.config.js. */
+@theme {
+  --color-bg: var(--color-bg);
+  --color-surface: var(--color-surface);
+  --color-ink: var(--color-text);
+  --color-accent: var(--color-accent);
+  --color-divider: var(--color-divider);
+  --font-heading: var(--font-heading);
+  --font-body: var(--font-body);
+  --radius-none: 0px;
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+  --spacing-1: var(--space-1);
+  --spacing-2: var(--space-2);
+  --spacing-3: var(--space-3);
+  --spacing-4: var(--space-4);
+  --spacing-6: var(--space-6);
+  --spacing-8: var(--space-8);
+}

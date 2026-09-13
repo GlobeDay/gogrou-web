@@ -1,15 +1,22 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
+import { Barlow, Barlow_Condensed, IBM_Plex_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 import { Sidebar, MobileBar } from "@/components/sidebar";
 import { ScanTopBar } from "@/components/scan-topbar";
 
-const sans = IBM_Plex_Sans({
+const sans = Barlow({
   subsets: ["latin", "latin-ext"],
-  weight: ["300", "400", "500", "600", "700"],
+  weight: ["400", "500", "700"],
   variable: "--font-sans",
+  display: "swap",
+});
+
+const condensed = Barlow_Condensed({
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "600"],
+  variable: "--font-condensed",
   display: "swap",
 });
 
@@ -30,8 +37,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   themeColor: [
     // Sladěno s --background tokeny v globals.css (oklch → sRGB aproximace)
-    { media: "(prefers-color-scheme: light)", color: "#fbfbf9" },
-    { media: "(prefers-color-scheme: dark)",  color: "#131417" },
+    { media: "(prefers-color-scheme: light)", color: "#f2f2f3" },
+    { media: "(prefers-color-scheme: dark)",  color: "#1d1f20" },
   ],
 };
 
@@ -55,7 +62,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     <html
       lang="cs"
       suppressHydrationWarning
-      className={`${sans.variable} ${mono.variable} h-full antialiased`}
+      className={`${sans.variable} ${condensed.variable} ${mono.variable} h-full antialiased`}
     >
       <body className="min-h-full bg-background text-foreground">
         <Providers>
