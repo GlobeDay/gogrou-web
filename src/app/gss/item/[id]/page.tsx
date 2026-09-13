@@ -1,14 +1,16 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, ScanLine } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { getServerSupabase, getServerUser } from "@/lib/supabase-server";
+import { can } from "@/lib/tenant";
 import { fmtDate } from "@/lib/format";
 import { StatusBadge } from "@/components/status-badge";
+import { ItemStockActions } from "./item-stock-actions";
 
 type Params = Promise<{ id: string }>;
 
@@ -58,8 +60,14 @@ export default async function ItemDetailPage({ params }: { params: Params }) {
   for (const p of pieces) counts[p.status] = (counts[p.status] ?? 0) + 1;
 
   const inStock = counts.in_stock ?? 0;
+  const sharpenableCount =
+    (counts.in_machine ?? 0) +
+    (counts.in_production ?? 0) +
+    (counts.in_preset ?? 0) +
+    inStock;
   const reorder = item.reorder_point ?? 0;
   const isLowStock = reorder > 0 && inStock < reorder;
+  const canAct = await can("gss.transfer");
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6 space-y-4">
@@ -94,6 +102,13 @@ export default async function ItemDetailPage({ params }: { params: Params }) {
           </Card>
         ))}
       </div>
+
+      <ItemStockActions
+        itemId={id}
+        canAct={canAct}
+        inStockCount={inStock}
+        sharpenableCount={sharpenableCount}
+      />
 
       {/* Policy */}
       <Card>
