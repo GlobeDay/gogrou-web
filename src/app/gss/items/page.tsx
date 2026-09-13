@@ -44,7 +44,12 @@ export default async function ItemsPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 space-y-4">
       <div className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-bold tracking-tight">Skladové karty</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight">Skladové karty</h1>
+          <Link href="/gss/terminal" className="text-sm underline">Terminál</Link>
+          <Link href="/gss/adopt" className="text-sm underline">Převzít z GPC</Link>
+          <Link href="/gss/local-item" className="text-sm underline">Lokální položka</Link>
+        </div>
         <span className="text-sm text-muted-foreground">
           tenant <span className="font-mono">{tenant}</span> · {rows.length} položek
         </span>

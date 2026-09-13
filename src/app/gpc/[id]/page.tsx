@@ -9,6 +9,7 @@ import { supabase, TOOL_TYPE_LABELS, type ToolType } from "@/lib/supabase";
 import { fmtValue, fmtDate } from "@/lib/format";
 import { can } from "@/lib/tenant";
 import { StatusBadge } from "@/components/status-badge";
+import { AdoptButton } from "@/app/gss/adopt/adopt-client";
 
 type Params = Promise<{ id: string }>;
 
@@ -44,7 +45,11 @@ export default async function GpcDetail({ params }: { params: Params }) {
   const product = await getProduct(id);
   if (!product) notFound();
 
-  const [schema, canEdit] = await Promise.all([getSchema(product.type), can("gpc.edit")]);
+  const [schema, canEdit, canAdopt] = await Promise.all([
+    getSchema(product.type),
+    can("gpc.edit"),
+    can("gss.transfer"),
+  ]);
   const params_ = (product.params ?? {}) as Record<string, unknown>;
 
   // Group params by section
@@ -74,6 +79,7 @@ export default async function GpcDetail({ params }: { params: Params }) {
           <Badge variant="outline" className="font-mono">{product.type}</Badge>
           <span className="text-muted-foreground">{TOOL_TYPE_LABELS[product.type as ToolType]?.cs}</span>
           <StatusBadge status={product.status} />
+          {canAdopt && <div className="mt-2"><AdoptButton productId={product.id} /></div>}
           {canEdit && (
             <Link href={`/gpc/${product.id}/edit`} className="mt-2">
               <Button size="sm" variant="outline" className="h-7"><Pencil className="h-3 w-3 mr-1" /> Edit</Button>
