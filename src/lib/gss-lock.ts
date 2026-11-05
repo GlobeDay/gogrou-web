@@ -29,6 +29,21 @@ export const RETURN_DECISION_LABELS = {
 
 export type ReturnDecision = keyof typeof RETURN_DECISION_LABELS;
 
+export const CONDITION_LABELS = {
+  new: "Nový",
+  resharpened_new: "Nový přebroušený",
+  used: "Použitý",
+} as const;
+
+export type PieceCondition = keyof typeof CONDITION_LABELS;
+
+export const TRACKING_MODE_LABELS = {
+  quantity: "Množstevní (bez DM)",
+  dm: "DM/QID sledování",
+} as const;
+
+export type TrackingMode = keyof typeof TRACKING_MODE_LABELS;
+
 export const SHIPMENT_STATUS_LABELS = {
   draft: "Koncept",
   sent_to_service: "Odesláno do servisu",

@@ -10,7 +10,7 @@ import type { Database } from "@/lib/database.types";
 export type StockAction = "receive" | "issue" | "sharpen";
 
 export type StockActionResult =
-  | { ok: true; action: StockAction; dm_code: string }
+  | { ok: true; action: StockAction; dm_code?: string; message?: string }
   | { ok: false; error: string };
 
 type PieceStatus = Database["public"]["Enums"]["piece_status"];
@@ -24,6 +24,8 @@ type TenantContext = {
   itemId: string;
   tenantId: string;
   tenantPrefix: string;
+  trackingMode: Database["public"]["Enums"]["item_tracking_mode"];
+  qtyOnHand: number;
   locations: LocationRow[];
 };
 
@@ -70,7 +72,7 @@ async function loadTenantContext(itemId: string): Promise<TenantContextResult> {
   const sb = await getServerSupabase();
   const { data: item, error: itemErr } = await sb
     .from("gss_items")
-    .select("id, tenant_id")
+    .select("id, tenant_id, tracking_mode, qty_on_hand")
     .eq("id", itemId)
     .maybeSingle();
   if (itemErr) return { ok: false, error: itemErr.message ?? "Načtení karty selhalo." };
@@ -92,6 +94,8 @@ async function loadTenantContext(itemId: string): Promise<TenantContextResult> {
       itemId: item.id,
       tenantId: item.tenant_id,
       tenantPrefix: tenant.prefix,
+      trackingMode: item.tracking_mode,
+      qtyOnHand: item.qty_on_hand ?? 0,
       locations: (locations ?? []) as LocationRow[],
     },
   };
@@ -102,10 +106,11 @@ async function insertMovement(
   input: {
     tenantId: string;
     itemId: string;
-    pieceId: string;
+    pieceId: string | null;
     movement: MovementType;
     fromId: string | null;
     toId: string | null;
+    quantity?: number;
     createdBy: string | null;
     payload: Record<string, unknown>;
   },
@@ -117,11 +122,73 @@ async function insertMovement(
     movement: input.movement,
     from_location_id: input.fromId,
     to_location_id: input.toId,
-    quantity: 1,
+    quantity: input.quantity ?? 1,
     payload: input.payload as never,
     created_by: input.createdBy,
   });
   return error;
+}
+
+/** Množstevní (non-DM) režim: posun qty_on_hand o ±1 + jeden pohyb, žádné kusy. */
+async function applyQuantityAction(
+  ctx: TenantContext,
+  action: Exclude<StockAction, "sharpen">,
+): Promise<StockActionResult> {
+  const main = pickLocation(ctx.locations, "MAIN");
+  if (!main) return { ok: false, error: "Lokace MAIN v tenantu chybí." };
+
+  let movement: MovementType;
+  let fromId: string | null;
+  let toId: string | null;
+  let newQty: number;
+  if (action === "receive") {
+    movement = "receive";
+    fromId = null;
+    toId = main.id;
+    newQty = ctx.qtyOnHand + 1;
+  } else {
+    if (ctx.qtyOnHand < 1) return { ok: false, error: "Na skladě není nic k výdeji." };
+    const machine = pickLocation(ctx.locations, "MACHINE-01", "MACHINE");
+    if (!machine) return { ok: false, error: "Lokace MACHINE-01 v tenantu chybí." };
+    movement = "issue";
+    fromId = main.id;
+    toId = machine.id;
+    newQty = ctx.qtyOnHand - 1;
+  }
+
+  const { error: updErr } = await ctx.sb
+    .from("gss_items")
+    .update({ qty_on_hand: newQty })
+    .eq("id", ctx.itemId)
+    .eq("tenant_id", ctx.tenantId);
+  if (updErr) return { ok: false, error: updErr.message };
+
+  const mvErr = await insertMovement(ctx.sb, {
+    tenantId: ctx.tenantId,
+    itemId: ctx.itemId,
+    pieceId: null,
+    movement,
+    fromId,
+    toId,
+    quantity: 1,
+    createdBy: ctx.user.email ?? null,
+    payload: { source: "item_qty_actions", action, mode: "quantity" },
+  });
+  if (mvErr) {
+    await ctx.sb
+      .from("gss_items")
+      .update({ qty_on_hand: ctx.qtyOnHand })
+      .eq("id", ctx.itemId)
+      .eq("tenant_id", ctx.tenantId);
+    return { ok: false, error: mvErr.message };
+  }
+
+  revalidateItem(ctx.itemId);
+  return {
+    ok: true,
+    action,
+    message: action === "receive" ? `Příjem +1 (bez DM), skladem ${newQty}.` : `Výdej −1 (bez DM), skladem ${newQty}.`,
+  };
 }
 
 function revalidateItem(itemId: string) {
@@ -259,6 +326,13 @@ export async function applyStockAction(
   const loaded = await loadTenantContext(itemId);
   if (!loaded.ok) return { ok: false, error: loaded.error };
   const { ctx } = loaded;
+
+  if (ctx.trackingMode === "quantity") {
+    if (action === "sharpen") {
+      return { ok: false, error: "Broušení vyžaduje DM/QID sledování — přepni režim položky." };
+    }
+    return applyQuantityAction(ctx, action);
+  }
 
   switch (action) {
     case "receive":

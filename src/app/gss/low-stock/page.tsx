@@ -73,7 +73,7 @@ export default async function LowStockPage() {
                 return (
                   <TableRow key={it.item_id} className="hover:bg-accent/40">
                     <TableCell>
-                      <Link href={`/gpc/${it.product_id}`} className="hover:underline">
+                      <Link href={it.product_id ? `/gpc/${it.product_id}` : `/gss/item/${it.item_id}`} className="hover:underline">
                         <div className="font-medium">{it.name}</div>
                         <div className="font-mono text-xs text-muted-foreground">{it.gid}</div>
                       </Link>

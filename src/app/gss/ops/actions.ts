@@ -41,6 +41,7 @@ async function insertMovement(
     pieceId?: string | null;
     fromId?: string | null;
     toId?: string | null;
+    quantity?: number;
     payload: Record<string, unknown>;
   },
 ) {
@@ -51,10 +52,19 @@ async function insertMovement(
     piece_id: input.pieceId ?? null,
     from_location_id: input.fromId ?? null,
     to_location_id: input.toId ?? null,
-    quantity: 1,
+    quantity: input.quantity ?? 1,
     payload: input.payload as Json,
     created_by: ctx.user.email ?? null,
   });
+}
+
+async function loadItem(ctx: GssCtx, itemId: string) {
+  return ctx.sb
+    .from("gss_items")
+    .select("id, tracking_mode, qty_on_hand, max_qty")
+    .eq("id", itemId)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
 }
 
 async function loadPiece(ctx: { sb: Awaited<ReturnType<typeof getServerSupabase>>; tenantId: string }, dmCode: string) {
@@ -79,9 +89,10 @@ export async function adoptGpcProduct(productId: string): Promise<OpsResult> {
   if (pErr) return { ok: false, error: pErr.message };
   if (!product) return { ok: false, error: "Produkt v GPC nenalezen." };
 
+  // Non-DM evidence je výchozí režim; DM/QID je nadstavba (kap. 3.5 acceptance reportu)
   const { data: item, error } = await ctx.sb
     .from("gss_items")
-    .insert({ tenant_id: ctx.tenantId, gpc_product_id: product.id })
+    .insert({ tenant_id: ctx.tenantId, gpc_product_id: product.id, tracking_mode: "quantity" })
     .select("id")
     .single();
   if (error) {
@@ -102,51 +113,80 @@ export async function adoptGpcProduct(productId: string): Promise<OpsResult> {
 export async function createLocalItem(input: {
   name: string;
   manufacturer: string;
+  type?: string;
   min_qty: number | null;
   max_qty: number | null;
   reorder_point: number | null;
   notes: string;
 }): Promise<OpsResult> {
-  if (!(await can("gpc.edit"))) {
-    return { ok: false, error: "Lokální položka zapisuje do GPC — jen admin." };
-  }
-  const loaded = await loadGssContext();
+  // Lokální položka žije jen v GSS, GPC se nedotýká (kap. 3.5) — stačí supervisor
+  const loaded = await loadGssContext("gss.edit_lifecycle");
   if (!loaded.ok) return loaded;
   const { ctx } = loaded;
   const name = input.name.trim();
-  if (!name) return { ok: false, error: "Název je povinný." };
+  const manufacturer = input.manufacturer.trim();
+  if (!name || !manufacturer) return { ok: false, error: "Název a výrobce jsou povinné." };
 
-  const gid = `LOCAL-${ctx.tenantPrefix}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-  const { data: product, error: pErr } = await ctx.sb
-    .from("gpc_products")
-    .insert({
-      gid,
-      type: "local.unvalidated",
-      name,
-      manufacturer: input.manufacturer.trim() || ctx.tenantPrefix,
-      status: "active",
-      params: { local: true, tenant: ctx.tenantPrefix } as never,
-    })
-    .select("id")
-    .single();
-  if (pErr || !product) return { ok: false, error: pErr?.message ?? "GPC karta se nevytvořila." };
-
-  const { data: item, error: iErr } = await ctx.sb
+  const { data: item, error } = await ctx.sb
     .from("gss_items")
     .insert({
       tenant_id: ctx.tenantId,
-      gpc_product_id: product.id,
+      gpc_product_id: null,
+      local_name: name,
+      local_manufacturer: manufacturer,
+      local_type: input.type?.trim() || null,
+      tracking_mode: "quantity",
       min_qty: input.min_qty,
       max_qty: input.max_qty,
       reorder_point: input.reorder_point,
-      notes: input.notes || "Lokální nevalidovaná položka",
+      notes: input.notes,
     })
     .select("id")
     .single();
-  if (iErr || !item) return { ok: false, error: iErr?.message ?? "Skladová karta se nevytvořila." };
+  if (error || !item) return { ok: false, error: error?.message ?? "Skladová karta se nevytvořila." };
 
+  await insertMovement(ctx, {
+    movement: "adjust",
+    itemId: item.id,
+    payload: { source: "lock_parity", kind: "local_item_created", name, manufacturer },
+  });
   revalidateGss(item.id);
-  return { ok: true, message: "Lokální položka vytvořena.", id: item.id };
+  return { ok: true, message: `Lokální položka „${name}“ vytvořena (jen v GSS).`, id: item.id };
+}
+
+export async function requestGpcValidation(itemId: string, message: string): Promise<OpsResult> {
+  const loaded = await loadGssContext("gss.edit_lifecycle");
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  const { data: item, error } = await ctx.sb
+    .from("gss_items")
+    .select("id, gpc_product_id, local_name")
+    .eq("id", itemId)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!item) return { ok: false, error: "Položka nenalezena." };
+  if (item.gpc_product_id) {
+    return { ok: false, error: "Položka už má GPC kartu — validace není potřeba." };
+  }
+
+  const { data: pending } = await ctx.sb
+    .from("gss_gpc_validation_requests")
+    .select("id")
+    .eq("item_id", itemId)
+    .eq("status", "pending")
+    .maybeSingle();
+  if (pending) return { ok: false, error: "Žádost o validaci už čeká na vyřízení." };
+
+  const { error: insErr } = await ctx.sb.from("gss_gpc_validation_requests").insert({
+    tenant_id: ctx.tenantId,
+    item_id: itemId,
+    message: message.trim() || null,
+    created_by: ctx.user.email ?? null,
+  });
+  if (insErr) return { ok: false, error: insErr.message };
+  revalidateGss(itemId);
+  return { ok: true, message: "Žádost o zařazení do GPC odeslána." };
 }
 
 export async function updateItemPolicy(input: {
@@ -155,6 +195,10 @@ export async function updateItemPolicy(input: {
   max_qty: number | null;
   reorder_point: number | null;
   notes: string;
+  pack_size?: number | null;
+  supplier_primary?: string | null;
+  supplier_secondary?: string | null;
+  tracking_mode?: Database["public"]["Enums"]["item_tracking_mode"];
 }): Promise<OpsResult> {
   const loaded = await loadGssContext();
   if (!loaded.ok) return loaded;
@@ -165,6 +209,10 @@ export async function updateItemPolicy(input: {
       max_qty: input.max_qty,
       reorder_point: input.reorder_point,
       notes: input.notes,
+      ...(input.pack_size !== undefined ? { pack_size: input.pack_size } : {}),
+      ...(input.supplier_primary !== undefined ? { supplier_primary: input.supplier_primary } : {}),
+      ...(input.supplier_secondary !== undefined ? { supplier_secondary: input.supplier_secondary } : {}),
+      ...(input.tracking_mode !== undefined ? { tracking_mode: input.tracking_mode } : {}),
     })
     .eq("id", input.itemId)
     .eq("tenant_id", loaded.ctx.tenantId);
@@ -189,6 +237,45 @@ export async function receiveBatch(input: {
   }
   const main = pickLocation(ctx.locations, "MAIN");
   if (!main) return { ok: false, error: "Lokace MAIN chybí." };
+
+  const { data: item, error: itemErr } = await loadItem(ctx, input.itemId);
+  if (itemErr) return { ok: false, error: itemErr.message };
+  if (!item) return { ok: false, error: "Položka nenalezena." };
+
+  // Množstevní (non-DM) režim: žádné kusy, jen qty_on_hand + jeden pohyb s quantity
+  if (item.tracking_mode === "quantity") {
+    const newQty = (item.qty_on_hand ?? 0) + qty;
+    const { error: updErr } = await ctx.sb
+      .from("gss_items")
+      .update({ qty_on_hand: newQty })
+      .eq("id", item.id)
+      .eq("tenant_id", ctx.tenantId);
+    if (updErr) return { ok: false, error: updErr.message };
+    const mv = await insertMovement(ctx, {
+      movement: "receive",
+      itemId: item.id,
+      toId: main.id,
+      quantity: qty,
+      payload: {
+        source: "lock_parity",
+        kind: "receive",
+        mode: "quantity",
+        receipt_source: input.source,
+        document_type: input.document_type,
+        doc_no: input.doc_no,
+      },
+    });
+    if (mv.error) {
+      await ctx.sb
+        .from("gss_items")
+        .update({ qty_on_hand: item.qty_on_hand ?? 0 })
+        .eq("id", item.id)
+        .eq("tenant_id", ctx.tenantId);
+      return { ok: false, error: mv.error.message };
+    }
+    revalidateGss(item.id);
+    return { ok: true, message: `Příjem +${qty} (bez DM), skladem ${newQty}.` };
+  }
 
   const { data: sibling } = await ctx.sb
     .from("gss_pieces")
@@ -243,7 +330,75 @@ export async function receiveBatch(input: {
   return { ok: true, message: `Příjem +${created.length}`, dm_code: created[0] };
 }
 
-export async function issuePieces(itemId: string, dmCodes: string[]): Promise<OpsResult> {
+export type IssueDetails = { machine?: string; order?: string; cost_center?: string };
+
+function issueDetailsPayload(details?: IssueDetails): Record<string, unknown> {
+  return {
+    ...(details?.machine?.trim() ? { machine: details.machine.trim() } : {}),
+    ...(details?.order?.trim() ? { order: details.order.trim() } : {}),
+    ...(details?.cost_center?.trim() ? { cost_center: details.cost_center.trim() } : {}),
+  };
+}
+
+export async function issueQuantity(
+  itemId: string,
+  qty: number,
+  details?: IssueDetails,
+): Promise<OpsResult> {
+  const loaded = await loadGssContext();
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  const n = Math.floor(qty);
+  if (!Number.isFinite(n) || n < 1) return { ok: false, error: "Množství musí být aspoň 1." };
+  const main = pickLocation(ctx.locations, "MAIN");
+  const machine = pickLocation(ctx.locations, "MACHINE-01", "MACHINE");
+  if (!machine) return { ok: false, error: "Lokace MACHINE-01 chybí." };
+
+  const { data: item, error: itemErr } = await loadItem(ctx, itemId);
+  if (itemErr) return { ok: false, error: itemErr.message };
+  if (!item) return { ok: false, error: "Položka nenalezena." };
+  if (item.tracking_mode !== "quantity") {
+    return { ok: false, error: "Položka je v DM režimu — vydávej konkrétní kusy." };
+  }
+  const onHand = item.qty_on_hand ?? 0;
+  if (onHand < n) return { ok: false, error: `Skladem jen ${onHand} ks.` };
+
+  const { error: updErr } = await ctx.sb
+    .from("gss_items")
+    .update({ qty_on_hand: onHand - n })
+    .eq("id", item.id)
+    .eq("tenant_id", ctx.tenantId);
+  if (updErr) return { ok: false, error: updErr.message };
+  const mv = await insertMovement(ctx, {
+    movement: "issue",
+    itemId: item.id,
+    fromId: main?.id ?? null,
+    toId: machine.id,
+    quantity: n,
+    payload: {
+      source: "lock_parity",
+      kind: "issue_to_production",
+      mode: "quantity",
+      ...issueDetailsPayload(details),
+    },
+  });
+  if (mv.error) {
+    await ctx.sb
+      .from("gss_items")
+      .update({ qty_on_hand: onHand })
+      .eq("id", item.id)
+      .eq("tenant_id", ctx.tenantId);
+    return { ok: false, error: mv.error.message };
+  }
+  revalidateGss(item.id);
+  return { ok: true, message: `Výdej ${n} ks do výroby, skladem ${onHand - n}.` };
+}
+
+export async function issuePieces(
+  itemId: string,
+  dmCodes: string[],
+  details?: IssueDetails,
+): Promise<OpsResult> {
   const loaded = await loadGssContext();
   if (!loaded.ok) return loaded;
   const { ctx } = loaded;
@@ -273,7 +428,7 @@ export async function issuePieces(itemId: string, dmCodes: string[]): Promise<Op
       pieceId: piece.id,
       fromId: piece.current_location_id,
       toId: machine.id,
-      payload: { source: "lock_parity", kind: "issue_to_production" },
+      payload: { source: "lock_parity", kind: "issue_to_production", ...issueDetailsPayload(details) },
     });
     if (mv.error) return { ok: false, error: mv.error.message };
   }
@@ -709,21 +864,32 @@ export async function listWarehouseCards() {
   if (!tenant) return [];
   const { data } = await sb
     .from("gss_items")
-    .select("id, min_qty, max_qty, reorder_point, notes, product:gpc_products!inner(id, gid, name, type, manufacturer)")
+    .select(
+      "id, min_qty, max_qty, reorder_point, notes, tracking_mode, qty_on_hand, local_name, local_manufacturer, local_type, product:gpc_products(id, gid, name, type, manufacturer)",
+    )
     .eq("tenant_id", tenant.id)
     .order("created_at", { ascending: false })
     .limit(500);
   return (data ?? []).map((row) => {
     const product = row.product as unknown as {
       id: string; gid: string; name: string; type: string; manufacturer: string | null;
-    };
+    } | null;
     return {
       id: row.id,
       min_qty: row.min_qty,
       max_qty: row.max_qty,
       reorder_point: row.reorder_point,
       notes: row.notes,
-      product,
+      tracking_mode: row.tracking_mode,
+      qty_on_hand: row.qty_on_hand,
+      is_local: !product,
+      product: product ?? {
+        id: null,
+        gid: "LOCAL",
+        name: row.local_name ?? "(bez názvu)",
+        type: row.local_type ?? "local",
+        manufacturer: row.local_manufacturer,
+      },
     };
   });
 }

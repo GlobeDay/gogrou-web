@@ -31,10 +31,10 @@ export interface ScanResponse {
     lifecycle: Record<string, unknown>;
   };
   product: {
-    gpc_product_id: string; gid: string; type: string;
+    gpc_product_id: string | null; gid: string; type: string;
     name: string; manufacturer: string | null;
-    params: Record<string, unknown>;
-    external_refs: Record<string, unknown>;
+    params: Record<string, unknown> | null;
+    external_refs: Record<string, unknown> | null;
   } | null;
   next_action: {
     code: string; title: string;

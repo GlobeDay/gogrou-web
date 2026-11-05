@@ -6,6 +6,7 @@ import { ArrowDownToLine, ArrowUpFromLine, Loader2, Wrench } from "lucide-react"
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
+import type { TrackingMode } from "@/lib/gss-lock";
 import { applyStockAction, type StockAction } from "./actions";
 
 type Props = {
@@ -13,12 +14,14 @@ type Props = {
   canAct: boolean;
   inStockCount: number;
   sharpenableCount: number;
+  trackingMode: TrackingMode;
+  qtyOnHand: number;
 };
 
-const SUCCESS: Record<StockAction, (dm: string) => string> = {
-  receive: (dm) => `Příjem +1 · ${dm}`,
-  issue: (dm) => `Výdej −1 · ${dm} → stroj`,
-  sharpen: (dm) => `Na broušení · ${dm} → SERVICE_BIN`,
+const SUCCESS: Record<StockAction, (dm: string | undefined) => string> = {
+  receive: (dm) => (dm ? `Příjem +1 · ${dm}` : "Příjem +1"),
+  issue: (dm) => (dm ? `Výdej −1 · ${dm} → stroj` : "Výdej −1"),
+  sharpen: (dm) => (dm ? `Na broušení · ${dm} → SERVICE_BIN` : "Na broušení"),
 };
 
 export function ItemStockActions({
@@ -26,9 +29,13 @@ export function ItemStockActions({
   canAct,
   inStockCount,
   sharpenableCount,
+  trackingMode,
+  qtyOnHand,
 }: Props) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const quantityMode = trackingMode === "quantity";
+  const issuable = quantityMode ? qtyOnHand : inStockCount;
 
   function run(action: StockAction) {
     start(async () => {
@@ -37,7 +44,7 @@ export function ItemStockActions({
         toast.error(result.error);
         return;
       }
-      toast.success(SUCCESS[result.action](result.dm_code));
+      toast.success(result.message ?? SUCCESS[result.action](result.dm_code));
       router.refresh();
     });
   }
@@ -59,21 +66,23 @@ export function ItemStockActions({
         <Button
           type="button"
           variant="outline"
-          disabled={!canAct || pending || inStockCount === 0}
+          disabled={!canAct || pending || issuable === 0}
           onClick={() => run("issue")}
         >
           {pending ? <Loader2 className="animate-spin" /> : <ArrowUpFromLine />}
           − Výdej
         </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={!canAct || pending || sharpenableCount === 0}
-          onClick={() => run("sharpen")}
-        >
-          {pending ? <Loader2 className="animate-spin" /> : <Wrench />}
-          Na broušení
-        </Button>
+        {!quantityMode && (
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={!canAct || pending || sharpenableCount === 0}
+            onClick={() => run("sharpen")}
+          >
+            {pending ? <Loader2 className="animate-spin" /> : <Wrench />}
+            Na broušení
+          </Button>
+        )}
         {!canAct && (
           <span className="text-xs text-muted-foreground">
             Pouze role operator a vyšší.
@@ -81,7 +90,9 @@ export function ItemStockActions({
         )}
         {canAct && (
           <span className="text-xs text-muted-foreground">
-            FIFO kus · příjem založí nový DM kód
+            {quantityMode
+              ? "Množstevní režim · bez DM kódů"
+              : "FIFO kus · příjem založí nový DM kód"}
           </span>
         )}
       </CardContent>

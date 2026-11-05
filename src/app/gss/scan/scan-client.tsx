@@ -187,9 +187,13 @@ function ScanResult({ data, role, onAction, actionPending }: {
             {product ? (
               <>
                 <h2 className="text-2xl font-bold tracking-tight">
-                  <Link href={`/gpc/${product.gpc_product_id}`} className="hover:underline decoration-primary/60 underline-offset-4">
-                    {product.name}
-                  </Link>
+                  {product.gpc_product_id ? (
+                    <Link href={`/gpc/${product.gpc_product_id}`} className="hover:underline decoration-primary/60 underline-offset-4">
+                      {product.name}
+                    </Link>
+                  ) : (
+                    product.name
+                  )}
                 </h2>
                 <div className="text-sm text-muted-foreground space-x-3">
                   <span className="font-mono">{product.gid}</span>
@@ -223,7 +227,13 @@ function ScanResult({ data, role, onAction, actionPending }: {
                 </span>
               </div>
             </div>
-            <div className="font-mono text-xs text-muted-foreground">{data.piece.dm_code}</div>
+            <Link
+              href={`/gss/piece/${encodeURIComponent(data.piece.dm_code)}`}
+              className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline underline-offset-4"
+              title="Otevřít detail kusu"
+            >
+              {data.piece.dm_code}
+            </Link>
           </CardContent>
         </Card>
       </div>

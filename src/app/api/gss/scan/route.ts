@@ -36,8 +36,8 @@ export async function POST(req: NextRequest) {
       id, dm_code, status, lifecycle, item_id, tenant_id, current_location_id, created_at, updated_at,
       location:gss_locations!gss_pieces_current_location_id_fkey(id, code, name),
       item:gss_items!inner(
-        id, reorder_point, min_qty, max_qty,
-        product:gpc_products!inner(id, gid, type, name, manufacturer, params, external_refs)
+        id, reorder_point, min_qty, max_qty, local_name, local_manufacturer, local_type,
+        product:gpc_products(id, gid, type, name, manufacturer, params, external_refs)
       )
     `)
     .eq("tenant_id", tenant.id)
@@ -68,7 +68,17 @@ export async function POST(req: NextRequest) {
           params: p.item.product.params,
           external_refs: p.item.product.external_refs,
         }
-      : null,
+      : p.item
+        ? {
+            gpc_product_id: null,
+            gid: "LOCAL",
+            type: p.item.local_type ?? "local",
+            name: p.item.local_name ?? "(bez názvu)",
+            manufacturer: p.item.local_manufacturer ?? null,
+            params: null,
+            external_refs: null,
+          }
+        : null,
     next_action,
     allowed_transitions: allowedTransitions(p),
   });

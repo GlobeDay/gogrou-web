@@ -7,7 +7,7 @@ import type { Database } from "./database.types";
 
 export interface LowStockItem {
   item_id: string;
-  product_id: string;
+  product_id: string | null;
   gid: string;
   type: string;
   name: string;
@@ -30,23 +30,43 @@ export async function computeLowStock(
     .from("gss_items")
     .select(`
       id, reorder_point, min_qty, max_qty,
-      product:gpc_products!inner(id, gid, type, name, manufacturer),
+      tracking_mode, qty_on_hand, local_name, local_manufacturer, local_type,
+      product:gpc_products(id, gid, type, name, manufacturer),
       pieces:gss_pieces!gss_pieces_item_id_fkey(id, status)
     `)
     .eq("tenant_id", tenantId);
   if (error) throw error;
 
-  type Row = NonNullable<typeof data>[number];
+  type Row = {
+    id: string;
+    reorder_point: number | null;
+    min_qty: number | null;
+    max_qty: number | null;
+    tracking_mode: string;
+    qty_on_hand: number;
+    local_name: string | null;
+    local_manufacturer: string | null;
+    local_type: string | null;
+    product: { id: string; gid: string; type: string; name: string; manufacturer: string | null } | null;
+    pieces: Array<{ id: string; status: string }> | null;
+  };
   const out: LowStockItem[] = [];
-  for (const it of (data ?? []) as Row[]) {
-    const pcs = (it as any).pieces as Array<{ status: string }> | null;
-    const inStock = pcs?.filter((p) => p.status === "in_stock").length ?? 0;
+  for (const it of (data ?? []) as unknown as Row[]) {
+    const pcs = it.pieces;
+    // qty_on_hand (bez DM) + fyzické kusy na skladě
+    const inStock = (pcs?.filter((p) => p.status === "in_stock").length ?? 0) + (it.qty_on_hand ?? 0);
     const reorder = it.reorder_point ?? 0;
     if (inStock >= reorder) continue;
     const inProd = pcs?.filter((p) => p.status === "in_production" || p.status === "in_machine").length ?? 0;
     const inSvc  = pcs?.filter((p) => p.status === "in_service").length ?? 0;
     const suggested = Math.max(0, (it.max_qty ?? reorder * 2) - inStock);
-    const p = (it as any).product;
+    const p = it.product ?? {
+      id: null,
+      gid: "LOCAL",
+      type: it.local_type ?? "local",
+      name: it.local_name ?? "(bez názvu)",
+      manufacturer: it.local_manufacturer ?? null,
+    };
     out.push({
       item_id: it.id, product_id: p.id,
       gid: p.gid, type: p.type, name: p.name, manufacturer: p.manufacturer,

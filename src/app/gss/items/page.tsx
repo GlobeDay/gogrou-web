@@ -24,7 +24,8 @@ export default async function ItemsPage() {
     .from("gss_items")
     .select(`
       id, reorder_point, min_qty, max_qty, created_at,
-      product:gpc_products!inner(id, gid, type, name),
+      tracking_mode, qty_on_hand, local_name, local_type,
+      product:gpc_products(id, gid, type, name),
       pieces:gss_pieces!gss_pieces_item_id_fkey(id, status)
     `)
     .eq("tenant_id", tenantRow.id)
@@ -32,13 +33,34 @@ export default async function ItemsPage() {
     .limit(500);
   if (error) return <div className="mx-auto max-w-7xl px-4 py-6 text-destructive">Chyba: {error.message}</div>;
 
-  type Row = NonNullable<typeof data>[number];
-  const rows = (data ?? []).map((it: Row) => {
-    const pieces = (it as any).pieces as Array<{ status: string }> | null;
-    const status = pieces?.reduce<Record<string, number>>((acc, p) => {
+  type ItemRow = {
+    id: string;
+    reorder_point: number | null;
+    min_qty: number | null;
+    max_qty: number | null;
+    created_at: string;
+    tracking_mode: string;
+    qty_on_hand: number;
+    local_name: string | null;
+    local_type: string | null;
+    product: { id: string; gid: string; type: string; name: string } | null;
+    pieces: Array<{ id: string; status: string }> | null;
+  };
+  const rows = ((data ?? []) as unknown as ItemRow[]).map((it) => {
+    const status = it.pieces?.reduce<Record<string, number>>((acc, p) => {
       acc[p.status] = (acc[p.status] ?? 0) + 1; return acc;
     }, {}) ?? {};
-    return { it, status };
+    return {
+      it,
+      status,
+      isLocal: !it.product,
+      product: it.product ?? {
+        id: null,
+        gid: "LOCAL",
+        type: it.local_type ?? "local",
+        name: it.local_name ?? "(bez názvu)",
+      },
+    };
   });
 
   return (
@@ -69,19 +91,23 @@ export default async function ItemsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(({ it, status }) => {
-                const inStock = status.in_stock ?? 0;
+              {rows.map(({ it, status, isLocal, product }) => {
+                // qty_on_hand (bez DM) + fyzické kusy na skladě
+                const inStock = (status.in_stock ?? 0) + (it.qty_on_hand ?? 0);
                 const reorder = (it.reorder_point ?? 0);
                 const lowStock = reorder > 0 && inStock < reorder;
                 return (
                   <TableRow key={it.id} className="hover:bg-accent/40">
                     <TableCell>
                       <Link href={`/gss/item/${it.id}`} className="hover:underline">
-                        <div className="font-medium">{(it as any).product.name}</div>
-                        <div className="font-mono text-xs text-muted-foreground">{(it as any).product.gid}</div>
+                        <div className="font-medium">
+                          {product.name}
+                          {isLocal && <Badge variant="destructive" className="ml-2 text-2xs">LOKÁLNÍ</Badge>}
+                        </div>
+                        <div className="font-mono text-xs text-muted-foreground">{product.gid}</div>
                       </Link>
                     </TableCell>
-                    <TableCell><Badge variant="outline" className="font-mono text-xs">{(it as any).product.type}</Badge></TableCell>
+                    <TableCell><Badge variant="outline" className="font-mono text-xs">{product.type}</Badge></TableCell>
                     <TableCell className={`text-right font-mono ${lowStock ? "text-destructive font-bold" : ""}`}>{inStock}</TableCell>
                     <TableCell className="text-right font-mono text-muted-foreground">{status.in_machine ?? 0}</TableCell>
                     <TableCell className="text-right font-mono text-muted-foreground">{status.in_service ?? 0}</TableCell>

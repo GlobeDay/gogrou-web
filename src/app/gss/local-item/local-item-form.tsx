@@ -10,15 +10,17 @@ export function LocalItemForm() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [manufacturer, setManufacturer] = useState("");
+  const [type, setType] = useState("");
   const [min, setMin] = useState("0");
   const [max, setMax] = useState("0");
   const [reorder, setReorder] = useState("0");
-  const [notes, setNotes] = useState("Lokální nevalidovaná položka");
+  const [notes, setNotes] = useState("Lokální položka (jen v GSS)");
 
   return (
     <div className="grid gap-3">
-      <Field label="Název"><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
-      <Field label="Výrobce"><Input value={manufacturer} onChange={(e) => setManufacturer(e.target.value)} /></Field>
+      <Field label="Název *"><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
+      <Field label="Výrobce *"><Input value={manufacturer} onChange={(e) => setManufacturer(e.target.value)} /></Field>
+      <Field label="Typ (volitelné)"><Input value={type} onChange={(e) => setType(e.target.value)} placeholder="např. tool.endmill" /></Field>
       <div className="grid grid-cols-3 gap-2">
         <Field label="Min"><Input type="number" value={min} onChange={(e) => setMin(e.target.value)} /></Field>
         <Field label="Max"><Input type="number" value={max} onChange={(e) => setMax(e.target.value)} /></Field>
@@ -27,10 +29,12 @@ export function LocalItemForm() {
       <Field label="Poznámka"><Input value={notes} onChange={(e) => setNotes(e.target.value)} /></Field>
       <OpsSubmit
         label="Přidat lokální položku"
+        disabled={!name.trim() || !manufacturer.trim()}
         run={async () => {
           const result = await createLocalItem({
             name,
             manufacturer,
+            type,
             min_qty: Number(min) || null,
             max_qty: Number(max) || null,
             reorder_point: Number(reorder) || null,
