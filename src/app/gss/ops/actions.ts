@@ -14,12 +14,12 @@ import {
   newReleaseCode,
   ORDER_STATUS_LABELS,
   RETURN_DECISION_LABELS,
+  SHIPMENT_STATUS_LABELS,
   type DocumentType,
   type OverstockOffer,
   type PieceLifecycle,
   type ReceiptSource,
   type ReturnDecision,
-  type ServiceShipment,
   type ShipmentStatus,
 } from "@/lib/gss-lock";
 import type { Database } from "@/lib/database.types";
@@ -1023,13 +1023,14 @@ export async function saveServiceParams(input: {
   return { ok: true, message: "Servisní parametry uloženy. Připrav štítek.", dm_code: input.dmCode };
 }
 
-export async function sendToSharpening(dmCode: string): Promise<OpsResult> {
-  const loaded = await loadGssContext();
-  if (!loaded.ok) return loaded;
-  const { ctx } = loaded;
-  const { data: piece, error } = await loadPiece(ctx, dmCode);
-  if (error) return { ok: false, error: error.message };
-  if (!piece) return { ok: false, error: "Kus nenalezen." };
+type LoadedPiece = NonNullable<Awaited<ReturnType<typeof loadPiece>>["data"]>;
+
+/** Jádro odeslání kusu na broušení (single, bulk i zásilka). */
+async function pieceToServiceCore(
+  ctx: GssCtx,
+  piece: LoadedPiece,
+  payload: Record<string, unknown>,
+): Promise<OpsResult> {
   const service = pickLocation(ctx.locations, "SERVICE_BIN", "SERVICE");
   if (!service) return { ok: false, error: "Lokace SERVICE_BIN chybí." };
   const { error: updErr } = await ctx.sb
@@ -1043,20 +1044,21 @@ export async function sendToSharpening(dmCode: string): Promise<OpsResult> {
     pieceId: piece.id,
     fromId: piece.current_location_id,
     toId: service.id,
-    payload: { source: "lock_parity", kind: "send_to_sharpening" },
+    payload: { source: "lock_parity", ...payload },
   });
   if (mv.error) return { ok: false, error: mv.error.message };
-  revalidateGss(piece.item_id);
-  return { ok: true, message: `${dmCode} odeslán na broušení.`, dm_code: dmCode };
+  return { ok: true, message: `${piece.dm_code} odeslán na broušení.`, dm_code: piece.dm_code };
 }
 
-export async function receiveFromSharpening(dmCode: string): Promise<OpsResult> {
-  const loaded = await loadGssContext();
-  if (!loaded.ok) return loaded;
-  const { ctx } = loaded;
-  const { data: piece, error } = await loadPiece(ctx, dmCode);
-  if (error) return { ok: false, error: error.message };
-  if (!piece) return { ok: false, error: "Kus nenalezen." };
+/**
+ * Jádro příjmu kusu z broušení: kondice RESHARPENED_NEW, cycles_done +1,
+ * zpět na MAIN jako in_stock (single, bulk i návratová zásilka).
+ */
+async function pieceFromServiceCore(
+  ctx: GssCtx,
+  piece: LoadedPiece,
+  payload: Record<string, unknown>,
+): Promise<OpsResult> {
   const main = pickLocation(ctx.locations, "MAIN");
   if (!main) return { ok: false, error: "Lokace MAIN chybí." };
   const life = asLifecycle(piece.lifecycle);
@@ -1075,16 +1077,168 @@ export async function receiveFromSharpening(dmCode: string): Promise<OpsResult> 
     })
     .eq("id", piece.id);
   if (updErr) return { ok: false, error: updErr.message };
-  await insertMovement(ctx, {
+  const mv = await insertMovement(ctx, {
     movement: "service_in",
     itemId: piece.item_id,
     pieceId: piece.id,
     fromId: piece.current_location_id,
     toId: main.id,
-    payload: { source: "lock_parity", kind: "receive_from_sharpening" },
+    payload: { source: "lock_parity", ...payload },
   });
-  revalidateGss(piece.item_id);
-  return { ok: true, message: `${dmCode} přijat z broušení jako Nový přebroušený.`, dm_code: dmCode };
+  if (mv.error) return { ok: false, error: mv.error.message };
+  return { ok: true, message: `${piece.dm_code} přijat z broušení jako Nový přebroušený.`, dm_code: piece.dm_code };
+}
+
+export async function sendToSharpening(dmCode: string): Promise<OpsResult> {
+  const loaded = await loadGssContext();
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  const { data: piece, error } = await loadPiece(ctx, dmCode);
+  if (error) return { ok: false, error: error.message };
+  if (!piece) return { ok: false, error: "Kus nenalezen." };
+  const result = await pieceToServiceCore(ctx, piece, { kind: "send_to_sharpening" });
+  if (result.ok) revalidateGss(piece.item_id);
+  return result;
+}
+
+export async function receiveFromSharpening(dmCode: string): Promise<OpsResult> {
+  const loaded = await loadGssContext();
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  const { data: piece, error } = await loadPiece(ctx, dmCode);
+  if (error) return { ok: false, error: error.message };
+  if (!piece) return { ok: false, error: "Kus nenalezen." };
+  const result = await pieceFromServiceCore(ctx, piece, { kind: "receive_from_sharpening" });
+  if (result.ok) revalidateGss(piece.item_id);
+  return result;
+}
+
+/** P5: hromadné odeslání vybraných kusů na broušení (product-centric terminál). */
+export async function sendPiecesToSharpening(dmCodes: string[]): Promise<OpsResult> {
+  const loaded = await loadGssContext();
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  if (dmCodes.length === 0) return { ok: false, error: "Vyber aspoň jeden kus." };
+  let itemId: string | null = null;
+  for (const dm of dmCodes) {
+    const { data: piece, error } = await loadPiece(ctx, dm);
+    if (error) return { ok: false, error: error.message };
+    if (!piece) return { ok: false, error: `Kus ${dm} nenalezen.` };
+    if (piece.status !== "in_stock") return { ok: false, error: `${dm} není na skladě (${piece.status}).` };
+    if (asLifecycle(piece.lifecycle).reservation?.active) {
+      return { ok: false, error: `${dm} je rezervovaný — nejdřív uvolni rezervaci.` };
+    }
+    const r = await pieceToServiceCore(ctx, piece, { kind: "send_to_sharpening", bulk: true });
+    if (!r.ok) return r;
+    itemId = piece.item_id;
+  }
+  revalidateGss(itemId ?? undefined);
+  return { ok: true, message: `Odesláno na broušení: ${dmCodes.length} ks.` };
+}
+
+/** P5: hromadný příjem vybraných kusů z broušení. */
+export async function receivePiecesFromSharpening(dmCodes: string[]): Promise<OpsResult> {
+  const loaded = await loadGssContext();
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  if (dmCodes.length === 0) return { ok: false, error: "Vyber aspoň jeden kus." };
+  let itemId: string | null = null;
+  for (const dm of dmCodes) {
+    const { data: piece, error } = await loadPiece(ctx, dm);
+    if (error) return { ok: false, error: error.message };
+    if (!piece) return { ok: false, error: `Kus ${dm} nenalezen.` };
+    if (piece.status !== "in_service") return { ok: false, error: `${dm} není na broušení (${piece.status}).` };
+    const r = await pieceFromServiceCore(ctx, piece, { kind: "receive_from_sharpening", bulk: true });
+    if (!r.ok) return r;
+    itemId = piece.item_id;
+  }
+  revalidateGss(itemId ?? undefined);
+  return { ok: true, message: `Přijato z broušení: ${dmCodes.length} ks (Nový přebroušený).` };
+}
+
+/** P5: non-DM množstevní servis — odeslání množství na broušení. */
+export async function sendQuantityToService(itemId: string, qty: number): Promise<OpsResult> {
+  const loaded = await loadGssContext();
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  const n = Math.floor(qty);
+  if (!Number.isFinite(n) || n < 1) return { ok: false, error: "Množství musí být aspoň 1." };
+  const { data: item, error } = await loadItem(ctx, itemId);
+  if (error) return { ok: false, error: error.message };
+  if (!item) return { ok: false, error: "Položka nenalezena." };
+  if (item.tracking_mode !== "quantity") return { ok: false, error: "Položka je v DM režimu — použij výběr kusů." };
+  const onHand = item.qty_on_hand ?? 0;
+  if (n > onHand) return { ok: false, error: `Skladem jen ${onHand} ks.` };
+  const service = pickLocation(ctx.locations, "SERVICE_BIN", "SERVICE");
+  const main = pickLocation(ctx.locations, "MAIN");
+  if (!service) return { ok: false, error: "Lokace SERVICE_BIN chybí." };
+
+  const { error: updErr } = await ctx.sb
+    .from("gss_items")
+    .update({ qty_on_hand: onHand - n })
+    .eq("id", item.id)
+    .eq("tenant_id", ctx.tenantId);
+  if (updErr) return { ok: false, error: updErr.message };
+  const mv = await insertMovement(ctx, {
+    movement: "service_out",
+    itemId: item.id,
+    fromId: main?.id ?? null,
+    toId: service.id,
+    quantity: n,
+    payload: { source: "lock_parity", kind: "qty_service_out", mode: "quantity" },
+  });
+  if (mv.error) {
+    await ctx.sb
+      .from("gss_items")
+      .update({ qty_on_hand: onHand })
+      .eq("id", item.id)
+      .eq("tenant_id", ctx.tenantId);
+    return { ok: false, error: mv.error.message };
+  }
+  revalidateGss(item.id);
+  return { ok: true, message: `Odesláno na broušení ${n} ks, skladem ${onHand - n}.` };
+}
+
+/** P5: non-DM množstevní servis — příjem množství z broušení zpět na sklad. */
+export async function receiveQuantityFromService(itemId: string, qty: number): Promise<OpsResult> {
+  const loaded = await loadGssContext();
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  const n = Math.floor(qty);
+  if (!Number.isFinite(n) || n < 1) return { ok: false, error: "Množství musí být aspoň 1." };
+  const { data: item, error } = await loadItem(ctx, itemId);
+  if (error) return { ok: false, error: error.message };
+  if (!item) return { ok: false, error: "Položka nenalezena." };
+  if (item.tracking_mode !== "quantity") return { ok: false, error: "Položka je v DM režimu — použij výběr kusů." };
+  const onHand = item.qty_on_hand ?? 0;
+  const service = pickLocation(ctx.locations, "SERVICE_BIN", "SERVICE");
+  const main = pickLocation(ctx.locations, "MAIN");
+  if (!main) return { ok: false, error: "Lokace MAIN chybí." };
+
+  const { error: updErr } = await ctx.sb
+    .from("gss_items")
+    .update({ qty_on_hand: onHand + n })
+    .eq("id", item.id)
+    .eq("tenant_id", ctx.tenantId);
+  if (updErr) return { ok: false, error: updErr.message };
+  const mv = await insertMovement(ctx, {
+    movement: "service_in",
+    itemId: item.id,
+    fromId: service?.id ?? null,
+    toId: main.id,
+    quantity: n,
+    payload: { source: "lock_parity", kind: "qty_service_in", mode: "quantity" },
+  });
+  if (mv.error) {
+    await ctx.sb
+      .from("gss_items")
+      .update({ qty_on_hand: onHand })
+      .eq("id", item.id)
+      .eq("tenant_id", ctx.tenantId);
+    return { ok: false, error: mv.error.message };
+  }
+  revalidateGss(item.id);
+  return { ok: true, message: `Přijato z broušení ${n} ks, skladem ${onHand + n}.` };
 }
 
 export async function saveOverstockOffer(itemId: string, qty: number, price: number): Promise<OpsResult> {
@@ -1107,34 +1261,368 @@ export async function saveOverstockOffer(itemId: string, qty: number, price: num
   return { ok: true, message: "Nadnormativní nabídka uložena." };
 }
 
-export async function saveShipment(input: {
-  id?: string;
-  number: string;
-  status: ShipmentStatus;
+// ---------------------------------------------------------------------------
+// P5: Servisní zásilky jako DB entita — třífázové workflow
+// zákazník → brusírna → zákazník (ReturnShipment přes return_of).
+// ---------------------------------------------------------------------------
+
+function shipmentNumber(prefix: string, direction: "to_service" | "return"): string {
+  const day = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  const rand = crypto.randomUUID().slice(0, 4).toUpperCase();
+  return `${direction === "return" ? "RET" : "SRV"}-${prefix}-${day}-${rand}`;
+}
+
+function revalidateShipments(shipmentId?: string) {
+  revalidateGss();
+  if (shipmentId) revalidatePath(`/gss/shipments/${shipmentId}`);
+}
+
+async function loadShipment(ctx: GssCtx, shipmentId: string) {
+  return ctx.sb
+    .from("gss_service_shipments")
+    .select(`id, number, direction, status, partner, customer, order_ref, note, return_of,
+             lines:gss_service_shipment_lines(id, qty, result, piece_id, item_id)`)
+    .eq("tenant_id", ctx.tenantId)
+    .eq("id", shipmentId)
+    .maybeSingle();
+}
+
+export async function createServiceShipment(input: {
+  partner: string;
   customer: string;
-  order: string;
+  order_ref: string;
+  note: string;
   dm_codes: string;
+  qty_lines: Array<{ item_id: string; qty: number }>;
 }): Promise<OpsResult> {
   const loaded = await loadGssContext();
   if (!loaded.ok) return loaded;
-  const shipment: ServiceShipment = {
-    id: input.id || crypto.randomUUID(),
-    number: input.number.trim() || `DL-BR-${loaded.ctx.tenantPrefix}-${Date.now().toString().slice(-4)}`,
-    status: input.status,
-    customer: input.customer.trim(),
-    order: input.order.trim(),
-    partner: "M-technologies",
-    items: input.dm_codes.split(/[\s,]+/).filter(Boolean).map((dm) => ({ dm_code: dm })),
-    updated_at: new Date().toISOString(),
-  };
-  const mv = await insertMovement(loaded.ctx, {
+  const { ctx } = loaded;
+
+  const dmCodes = [...new Set(input.dm_codes.split(/[\s,]+/).filter(Boolean))];
+  const qtyLines = input.qty_lines.filter((l) => l.item_id && Math.floor(l.qty) >= 1);
+  if (dmCodes.length === 0 && qtyLines.length === 0) {
+    return { ok: false, error: "Zásilka potřebuje aspoň jeden kus (DM) nebo množstevní řádek." };
+  }
+
+  // DM kusy: musí existovat a být na skladě nebo už v servisu (SERVICE_BIN)
+  const pieces: LoadedPiece[] = [];
+  for (const dm of dmCodes) {
+    const { data: piece, error } = await loadPiece(ctx, dm);
+    if (error) return { ok: false, error: error.message };
+    if (!piece) return { ok: false, error: `Kus ${dm} nenalezen.` };
+    if (piece.status !== "in_stock" && piece.status !== "in_service") {
+      return { ok: false, error: `${dm} nelze zařadit (stav ${piece.status}).` };
+    }
+    pieces.push(piece);
+  }
+
+  // Ochrana duplicit: kus nesmí být na jiné otevřené zásilce
+  if (pieces.length > 0) {
+    const { data: openLines, error: openErr } = await ctx.sb
+      .from("gss_service_shipment_lines")
+      .select("piece_id, shipment:gss_service_shipments!inner(number, status)")
+      .eq("tenant_id", ctx.tenantId)
+      .in("piece_id", pieces.map((p) => p.id));
+    if (openErr) return { ok: false, error: openErr.message };
+    type OpenLine = { piece_id: string | null; shipment: { number: string; status: string } };
+    const conflict = ((openLines ?? []) as unknown as OpenLine[]).find(
+      (l) => !["received_by_customer", "closed", "cancelled"].includes(l.shipment.status),
+    );
+    if (conflict) {
+      const dm = pieces.find((p) => p.id === conflict.piece_id)?.dm_code ?? "kus";
+      return { ok: false, error: `${dm} už je na otevřené zásilce ${conflict.shipment.number}.` };
+    }
+  }
+
+  // Množstevní řádky: jen quantity položky
+  for (const line of qtyLines) {
+    const { data: item, error } = await loadItem(ctx, line.item_id);
+    if (error) return { ok: false, error: error.message };
+    if (!item) return { ok: false, error: "Položka množstevního řádku nenalezena." };
+    if (item.tracking_mode !== "quantity") {
+      return { ok: false, error: "Množstevní řádek lze přidat jen pro položku bez DM." };
+    }
+  }
+
+  const number = shipmentNumber(ctx.tenantPrefix, "to_service");
+  const { data: shipment, error: shipErr } = await ctx.sb
+    .from("gss_service_shipments")
+    .insert({
+      tenant_id: ctx.tenantId,
+      number,
+      direction: "to_service",
+      status: "draft",
+      partner: input.partner.trim() || "M-technologies",
+      customer: input.customer.trim() || null,
+      order_ref: input.order_ref.trim() || null,
+      note: input.note.trim() || null,
+      created_by: ctx.user.email ?? null,
+    })
+    .select("id")
+    .single();
+  if (shipErr) return { ok: false, error: shipErr.message };
+
+  const lineRows = [
+    ...pieces.map((p) => ({ tenant_id: ctx.tenantId, shipment_id: shipment.id, piece_id: p.id, qty: 1 })),
+    ...qtyLines.map((l) => ({ tenant_id: ctx.tenantId, shipment_id: shipment.id, item_id: l.item_id, qty: Math.floor(l.qty) })),
+  ];
+  const { error: lineErr } = await ctx.sb.from("gss_service_shipment_lines").insert(lineRows);
+  if (lineErr) {
+    await ctx.sb.from("gss_service_shipments").delete().eq("id", shipment.id);
+    return { ok: false, error: lineErr.message };
+  }
+
+  await insertMovement(ctx, {
     movement: "adjust",
-    payload: { source: "lock_parity", kind: "service_shipment", shipment },
+    payload: { source: "lock_parity", kind: "service_shipment_created", shipment_id: shipment.id, number },
   });
-  if (mv.error) return { ok: false, error: mv.error.message };
-  revalidateGss();
-  revalidatePath("/gss/shipments");
-  return { ok: true, message: `Zásilka ${shipment.number} uložena.`, id: shipment.id };
+  revalidateShipments(shipment.id);
+  return { ok: true, message: `Zásilka ${number} založena (${lineRows.length} řádků).`, id: shipment.id };
+}
+
+/** Fáze 1: odeslání do brusírny — kusy → in_service, množství dolů ze skladu. */
+export async function sendServiceShipment(shipmentId: string): Promise<OpsResult> {
+  const loaded = await loadGssContext();
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  const { data: shipment, error } = await loadShipment(ctx, shipmentId);
+  if (error) return { ok: false, error: error.message };
+  if (!shipment) return { ok: false, error: "Zásilka nenalezena." };
+  if (shipment.direction !== "to_service") return { ok: false, error: "Odeslat lze jen zásilku do brusírny." };
+  if (shipment.status !== "draft") return { ok: false, error: `Zásilka už je ve stavu ${shipment.status}.` };
+
+  for (const line of shipment.lines) {
+    if (line.piece_id) {
+      const { data: piece, error: pErr } = await ctx.sb
+        .from("gss_pieces")
+        .select("id, dm_code, item_id, status, current_location_id, lifecycle")
+        .eq("id", line.piece_id)
+        .maybeSingle();
+      if (pErr) return { ok: false, error: pErr.message };
+      if (!piece) return { ok: false, error: "Kus řádku nenalezen." };
+      if (piece.status === "in_service") continue; // už v SERVICE_BIN (např. z rozhodovací fronty)
+      if (piece.status !== "in_stock") {
+        return { ok: false, error: `${piece.dm_code} nelze odeslat (stav ${piece.status}).` };
+      }
+      const r = await pieceToServiceCore(ctx, piece, {
+        kind: "send_to_sharpening",
+        shipment_id: shipment.id,
+        shipment_no: shipment.number,
+      });
+      if (!r.ok) return r;
+    } else if (line.item_id) {
+      const { data: item, error: iErr } = await loadItem(ctx, line.item_id);
+      if (iErr) return { ok: false, error: iErr.message };
+      if (!item) return { ok: false, error: "Položka řádku nenalezena." };
+      const onHand = item.qty_on_hand ?? 0;
+      if (line.qty > onHand) return { ok: false, error: `Skladem jen ${onHand} ks pro množstevní řádek.` };
+      const service = pickLocation(ctx.locations, "SERVICE_BIN", "SERVICE");
+      const main = pickLocation(ctx.locations, "MAIN");
+      const { error: updErr } = await ctx.sb
+        .from("gss_items")
+        .update({ qty_on_hand: onHand - line.qty })
+        .eq("id", item.id)
+        .eq("tenant_id", ctx.tenantId);
+      if (updErr) return { ok: false, error: updErr.message };
+      const mv = await insertMovement(ctx, {
+        movement: "service_out",
+        itemId: item.id,
+        fromId: main?.id ?? null,
+        toId: service?.id ?? null,
+        quantity: line.qty,
+        payload: {
+          source: "lock_parity",
+          kind: "qty_service_out",
+          mode: "quantity",
+          shipment_id: shipment.id,
+          shipment_no: shipment.number,
+        },
+      });
+      if (mv.error) return { ok: false, error: mv.error.message };
+    }
+  }
+
+  const { error: stErr } = await ctx.sb
+    .from("gss_service_shipments")
+    .update({ status: "sent_to_service" })
+    .eq("id", shipment.id);
+  if (stErr) return { ok: false, error: stErr.message };
+  revalidateShipments(shipment.id);
+  return { ok: true, message: `Zásilka ${shipment.number} odeslána do brusírny.` };
+}
+
+/** Fáze 2: stavové přechody u brusírny (bez pohybů zboží). */
+const SHIPMENT_TRANSITIONS: Partial<Record<ShipmentStatus, ShipmentStatus[]>> = {
+  draft: ["cancelled"],
+  sent_to_service: ["received_by_service"],
+  received_by_service: ["in_progress", "done"],
+  in_progress: ["partial", "done"],
+  partial: ["done"],
+  ready: ["shipped"],
+};
+
+export async function setServiceShipmentStatus(
+  shipmentId: string,
+  status: ShipmentStatus,
+): Promise<OpsResult> {
+  const loaded = await loadGssContext();
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  const { data: shipment, error } = await loadShipment(ctx, shipmentId);
+  if (error) return { ok: false, error: error.message };
+  if (!shipment) return { ok: false, error: "Zásilka nenalezena." };
+  const allowed = SHIPMENT_TRANSITIONS[shipment.status as ShipmentStatus] ?? [];
+  if (!allowed.includes(status)) {
+    return { ok: false, error: `Přechod ${shipment.status} → ${status} není povolen.` };
+  }
+  const { error: updErr } = await ctx.sb
+    .from("gss_service_shipments")
+    .update({ status })
+    .eq("id", shipment.id);
+  if (updErr) return { ok: false, error: updErr.message };
+  revalidateShipments(shipment.id);
+  return { ok: true, message: `Zásilka ${shipment.number}: ${SHIPMENT_STATUS_LABELS[status]}.` };
+}
+
+/** Fáze 3a: návratová zásilka (ReturnShipment) — kopie řádků, return_of. */
+export async function createReturnShipment(shipmentId: string): Promise<OpsResult> {
+  const loaded = await loadGssContext();
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  const { data: shipment, error } = await loadShipment(ctx, shipmentId);
+  if (error) return { ok: false, error: error.message };
+  if (!shipment) return { ok: false, error: "Zásilka nenalezena." };
+  if (shipment.direction !== "to_service") return { ok: false, error: "Návrat lze vytvořit jen k zásilce do brusírny." };
+  if (!["received_by_service", "in_progress", "partial", "done"].includes(shipment.status)) {
+    return { ok: false, error: `Zásilka ve stavu ${shipment.status} nemá co vracet.` };
+  }
+
+  const { data: existing } = await ctx.sb
+    .from("gss_service_shipments")
+    .select("id, number")
+    .eq("tenant_id", ctx.tenantId)
+    .eq("return_of", shipment.id)
+    .maybeSingle();
+  if (existing) return { ok: false, error: `Návratová zásilka ${existing.number} už existuje.` };
+
+  const number = shipmentNumber(ctx.tenantPrefix, "return");
+  const { data: ret, error: retErr } = await ctx.sb
+    .from("gss_service_shipments")
+    .insert({
+      tenant_id: ctx.tenantId,
+      number,
+      direction: "return",
+      status: "ready",
+      partner: shipment.partner,
+      customer: shipment.customer,
+      order_ref: shipment.order_ref,
+      note: `Návrat k ${shipment.number}`,
+      return_of: shipment.id,
+      created_by: ctx.user.email ?? null,
+    })
+    .select("id")
+    .single();
+  if (retErr) return { ok: false, error: retErr.message };
+
+  const lineRows = shipment.lines.map((l) => ({
+    tenant_id: ctx.tenantId,
+    shipment_id: ret.id,
+    piece_id: l.piece_id,
+    item_id: l.item_id,
+    qty: l.qty,
+  }));
+  if (lineRows.length > 0) {
+    const { error: lineErr } = await ctx.sb.from("gss_service_shipment_lines").insert(lineRows);
+    if (lineErr) {
+      await ctx.sb.from("gss_service_shipments").delete().eq("id", ret.id);
+      return { ok: false, error: lineErr.message };
+    }
+  }
+  revalidateShipments(ret.id);
+  revalidatePath(`/gss/shipments/${shipment.id}`);
+  return { ok: true, message: `Návratová zásilka ${number} připravena.`, id: ret.id };
+}
+
+/** Fáze 3b: příjem návratu — kusy RESHARPENED_NEW zpět na sklad, množství zpět. */
+export async function receiveReturnShipment(shipmentId: string): Promise<OpsResult> {
+  const loaded = await loadGssContext();
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  const { data: shipment, error } = await loadShipment(ctx, shipmentId);
+  if (error) return { ok: false, error: error.message };
+  if (!shipment) return { ok: false, error: "Zásilka nenalezena." };
+  if (shipment.direction !== "return") return { ok: false, error: "Přijmout lze jen návratovou zásilku." };
+  if (!["ready", "shipped"].includes(shipment.status)) {
+    return { ok: false, error: `Zásilka je ve stavu ${shipment.status}.` };
+  }
+
+  let received = 0;
+  for (const line of shipment.lines) {
+    if (line.piece_id) {
+      const { data: piece, error: pErr } = await ctx.sb
+        .from("gss_pieces")
+        .select("id, dm_code, item_id, status, current_location_id, lifecycle")
+        .eq("id", line.piece_id)
+        .maybeSingle();
+      if (pErr) return { ok: false, error: pErr.message };
+      if (!piece || piece.status !== "in_service") continue; // už přijato jinde
+      const r = await pieceFromServiceCore(ctx, piece, {
+        kind: "receive_from_sharpening",
+        shipment_id: shipment.id,
+        shipment_no: shipment.number,
+      });
+      if (!r.ok) return r;
+      await ctx.sb.from("gss_service_shipment_lines").update({ result: "resharpened" }).eq("id", line.id);
+      received += 1;
+    } else if (line.item_id) {
+      const { data: item, error: iErr } = await loadItem(ctx, line.item_id);
+      if (iErr) return { ok: false, error: iErr.message };
+      if (!item) continue;
+      const onHand = item.qty_on_hand ?? 0;
+      const service = pickLocation(ctx.locations, "SERVICE_BIN", "SERVICE");
+      const main = pickLocation(ctx.locations, "MAIN");
+      const { error: updErr } = await ctx.sb
+        .from("gss_items")
+        .update({ qty_on_hand: onHand + line.qty })
+        .eq("id", item.id)
+        .eq("tenant_id", ctx.tenantId);
+      if (updErr) return { ok: false, error: updErr.message };
+      const mv = await insertMovement(ctx, {
+        movement: "service_in",
+        itemId: item.id,
+        fromId: service?.id ?? null,
+        toId: main?.id ?? null,
+        quantity: line.qty,
+        payload: {
+          source: "lock_parity",
+          kind: "qty_service_in",
+          mode: "quantity",
+          shipment_id: shipment.id,
+          shipment_no: shipment.number,
+        },
+      });
+      if (mv.error) return { ok: false, error: mv.error.message };
+      await ctx.sb.from("gss_service_shipment_lines").update({ result: "returned" }).eq("id", line.id);
+      received += line.qty;
+    }
+  }
+
+  const { error: stErr } = await ctx.sb
+    .from("gss_service_shipments")
+    .update({ status: "received_by_customer" })
+    .eq("id", shipment.id);
+  if (stErr) return { ok: false, error: stErr.message };
+  if (shipment.return_of) {
+    await ctx.sb
+      .from("gss_service_shipments")
+      .update({ status: "closed" })
+      .eq("id", shipment.return_of)
+      .eq("tenant_id", ctx.tenantId);
+    revalidatePath(`/gss/shipments/${shipment.return_of}`);
+  }
+  revalidateShipments(shipment.id);
+  return { ok: true, message: `Návrat ${shipment.number} přijat (${received} ks), původní zásilka uzavřena.` };
 }
 
 export async function tryCreateTenant(input: {
@@ -1162,7 +1650,7 @@ export async function listPieces(opts?: { itemId?: string; statuses?: PieceStatu
   if (!loaded.ok) return [];
   let q = loaded.ctx.sb
     .from("gss_pieces")
-    .select("id, dm_code, item_id, status, lifecycle, updated_at, current_location_id")
+    .select("id, dm_code, item_id, status, condition, lifecycle, updated_at, current_location_id")
     .eq("tenant_id", loaded.ctx.tenantId)
     .order("updated_at", { ascending: false })
     .limit(400);
@@ -1180,6 +1668,7 @@ export async function listPieces(opts?: { itemId?: string; statuses?: PieceStatu
     dm_code: p.dm_code,
     item_id: p.item_id,
     status: p.status,
+    condition: p.condition,
     lifecycle: asLifecycle(p.lifecycle),
     location: p.current_location_id ? locMap.get(p.current_location_id) ?? null : null,
     updated_at: p.updated_at,

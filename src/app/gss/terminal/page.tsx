@@ -21,7 +21,7 @@ const TILES = [
   { href: "/gss/adopt", title: "Vyhledat v GPC", desc: "Převzít do skladu", icon: PackagePlus },
   { href: "/gss/local-item", title: "Lokální položka", desc: "Nevalidovaná SKU", icon: Stamp },
   { href: "/gss/overstock", title: "Nadnormativní zásoby", desc: "Nabídka přebytku", icon: Tags },
-  { href: "/gss/shipments", title: "Servisní zásilky", desc: "STM / M-technologies", icon: Truck },
+  { href: "/gss/shipments", title: "Servisní zásilky", desc: "Třífázové workflow s brusírnou", icon: Truck },
   { href: "/gss/low-stock", title: "Objednávkový návrh", desc: "Reorder export", icon: Warehouse },
   { href: "/gss/items", title: "Skladové položky", desc: "Karty a kusy", icon: Send },
 ];

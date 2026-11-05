@@ -70,6 +70,13 @@ export const SHIPMENT_STATUS_LABELS = {
 
 export type ShipmentStatus = keyof typeof SHIPMENT_STATUS_LABELS;
 
+export const SHIPMENT_DIRECTION_LABELS = {
+  to_service: "Do brusírny",
+  return: "Návrat zákazníkovi",
+} as const;
+
+export type ShipmentDirection = keyof typeof SHIPMENT_DIRECTION_LABELS;
+
 export type PieceLifecycle = {
   sharpening?: {
     cycles_done?: number;
@@ -93,17 +100,6 @@ export type PieceLifecycle = {
   };
   blocked?: boolean;
   condition?: "new" | "resharpened_new" | "used";
-};
-
-export type ServiceShipment = {
-  id: string;
-  number: string;
-  status: ShipmentStatus;
-  customer: string;
-  order: string;
-  partner: string;
-  items: Array<{ dm_code: string; note?: string }>;
-  updated_at: string;
 };
 
 export type OverstockOffer = {
