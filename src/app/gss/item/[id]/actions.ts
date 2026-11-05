@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getServerSupabase, getServerUser } from "@/lib/supabase-server";
 import { can } from "@/lib/tenant";
 import { inferStatusFromMovement } from "@/lib/scan-logic";
+import { asLifecycle, inheritLifecycle, newQid } from "@/lib/gss-lock";
 import type { Database } from "@/lib/database.types";
 
 export type StockAction = "receive" | "issue" | "sharpen";
@@ -144,6 +145,9 @@ async function receiveOne(ctx: TenantContext): Promise<StockActionResult> {
     .maybeSingle();
 
   const dmCode = receiveDmCode(ctx.tenantPrefix);
+  // QID vzniká automaticky spolu s DM kusem (AT-009); z lifecycle sourozence se dědí jen konfigurace
+  const qid = newQid(ctx.tenantPrefix);
+  const lifecycle = { ...inheritLifecycle(sibling?.lifecycle), condition: "new" as const, qid };
   const { data: piece, error: insErr } = await ctx.sb
     .from("gss_pieces")
     .insert({
@@ -151,8 +155,10 @@ async function receiveOne(ctx: TenantContext): Promise<StockActionResult> {
       item_id: ctx.itemId,
       dm_code: dmCode,
       status: "in_stock",
+      condition: "new",
+      qid,
       current_location_id: main.id,
-      lifecycle: (sibling?.lifecycle ?? {}) as never,
+      lifecycle: lifecycle as never,
     })
     .select("id")
     .single();
@@ -188,21 +194,32 @@ async function moveFifoPiece(
     to: LocationRow;
   },
 ): Promise<StockActionResult> {
-  const { data: piece, error: pieceErr } = await ctx.sb
+  const { data: candidates, error: pieceErr } = await ctx.sb
     .from("gss_pieces")
-    .select("id, dm_code, status, current_location_id")
+    .select("id, dm_code, status, current_location_id, lifecycle")
     .eq("item_id", ctx.itemId)
     .in("status", input.statuses)
     .order("updated_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+    .limit(200);
   if (pieceErr) return { ok: false, error: pieceErr.message };
-  if (!piece) {
+  if (!candidates || candidates.length === 0) {
     return {
       ok: false,
       error: input.action === "issue"
         ? "Na skladě není žádný kus k výdeji."
         : "Není žádný kus k odeslání na broušení.",
+    };
+  }
+
+  // Auto-pick nesmí sáhnout na rezervovaný ani blokovaný kus (AT-014)
+  const piece = candidates.find((p) => {
+    const lc = asLifecycle(p.lifecycle);
+    return !lc.reservation?.active && !lc.blocked;
+  });
+  if (!piece) {
+    return {
+      ok: false,
+      error: "Všechny dostupné kusy jsou rezervované nebo blokované — vyber konkrétní QID v terminálu.",
     };
   }
 

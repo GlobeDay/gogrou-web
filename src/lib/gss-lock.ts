@@ -105,6 +105,20 @@ export function mergeLifecycle(current: unknown, patch: PieceLifecycle): PieceLi
   };
 }
 
+/**
+ * Lifecycle pro nově přijatý kus: z posledního sourozence se smí zdědit jen
+ * konfigurace (max_cycles, instrukce) — nikdy rezervace, QID, kondice ani blokace.
+ */
+export function inheritLifecycle(sibling: unknown): PieceLifecycle {
+  const base = asLifecycle(sibling) as PieceLifecycle & { instructions?: unknown };
+  const out: PieceLifecycle & { instructions?: unknown } = {};
+  if (base.sharpening?.max_cycles !== undefined) {
+    out.sharpening = { max_cycles: base.sharpening.max_cycles };
+  }
+  if (base.instructions !== undefined) out.instructions = base.instructions;
+  return out;
+}
+
 export function newReleaseCode(): string {
   return `REL-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 }

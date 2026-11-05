@@ -25,13 +25,23 @@ export default async function LabelPage({ params }: { params: Params }) {
     .eq("dm_code", code)
     .maybeSingle();
   if (!piece) notFound();
-  const { data: item } = await sb.from("gss_items").select("gpc_product_id").eq("id", piece.item_id).maybeSingle();
-  if (!item) notFound();
-  const { data: product } = await sb
-    .from("gpc_products")
-    .select("name, manufacturer, gid")
-    .eq("id", item.gpc_product_id)
+  const { data: item } = await sb
+    .from("gss_items")
+    .select("gpc_product_id, local_name, local_manufacturer")
+    .eq("id", piece.item_id)
     .maybeSingle();
+  if (!item) notFound();
+  let product: { name: string; manufacturer: string | null; gid: string } | null = null;
+  if (item.gpc_product_id) {
+    const { data } = await sb
+      .from("gpc_products")
+      .select("name, manufacturer, gid")
+      .eq("id", item.gpc_product_id)
+      .maybeSingle();
+    product = data;
+  } else if (item.local_name) {
+    product = { name: item.local_name, manufacturer: item.local_manufacturer, gid: "LOCAL" };
+  }
   if (!product) notFound();
   const life = asLifecycle(piece.lifecycle);
 

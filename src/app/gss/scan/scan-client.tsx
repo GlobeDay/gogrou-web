@@ -30,10 +30,11 @@ function canDo(role: Role, action: "transfer" | "scrap"): boolean {
   return ROLE_CAPS[role].has(action);
 }
 
-export function ScanClient({ tenant, role }: { tenant: string; role: Role }) {
-  const [dmCode, setDmCode] = useState("");
+export function ScanClient({ tenant, role, initialDm }: { tenant: string; role: Role; initialDm?: string }) {
+  const [dmCode, setDmCode] = useState(initialDm?.toUpperCase() ?? "");
   const [result, setResult] = useState<ScanResponse | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const autoScanned = useRef(false);
   const qc = useQueryClient();
 
   useEffect(() => { inputRef.current?.focus(); }, []);
@@ -44,6 +45,15 @@ export function ScanClient({ tenant, role }: { tenant: string; role: Role }) {
     onSuccess: (data) => setResult(data),
     onError:   (err)  => { toast.error(String(err)); setResult(null); },
   });
+
+  // Auto-lookup při otevření přes /gss/scan?dm=...
+  useEffect(() => {
+    if (initialDm && !autoScanned.current) {
+      autoScanned.current = true;
+      scanMut.mutate();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const moveMut = useMutation({
     mutationFn: (action: { to: string | null; movement: "transfer" | "service_in" | "service_out" | "scrap" }) =>

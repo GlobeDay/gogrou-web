@@ -81,7 +81,7 @@ export function SearchForm({
           </Select>
         </div>
         <div className="md:col-span-2">
-          <Label className="text-xs">Text v name / gid</Label>
+          <Label className="text-xs">Název / GID / výrobce / GTIN</Label>
           <Input className="mt-1" placeholder="Hledat..." value={text} onChange={(e) => setText(e.target.value)} />
         </div>
       </div>
@@ -107,6 +107,47 @@ export function SearchForm({
       </div>
     </form>
   );
+}
+
+// "12" = přesná hodnota, "10-14" = rozsah, "12+" = od, "-14" = do
+function numericDisplay(filters: Record<string, string>, code: string): string {
+  if (filters[code] !== undefined) return filters[code];
+  const gte = filters[`${code}.gte`];
+  const lte = filters[`${code}.lte`];
+  if (gte && lte) return gte === lte ? gte : `${gte}-${lte}`;
+  if (gte) return `${gte}+`;
+  if (lte) return `-${lte}`;
+  return "";
+}
+
+function setNumericFilter(
+  filters: Record<string, string>,
+  setFilters: (f: Record<string, string>) => void,
+  code: string,
+  value: string,
+) {
+  const next = { ...filters };
+  delete next[code];
+  delete next[`${code}.gte`];
+  delete next[`${code}.lte`];
+  const t = value.trim().replace(/,/g, ".");
+  if (t) {
+    const num = "\\d+(?:\\.\\d+)?";
+    const range = t.match(new RegExp(`^(${num})\\s*[-–]\\s*(${num})$`));
+    const from = t.match(new RegExp(`^(${num})\\s*\\+$`));
+    const upTo = t.match(new RegExp(`^[-–]\\s*(${num})$`));
+    if (range) {
+      next[`${code}.gte`] = range[1];
+      next[`${code}.lte`] = range[2];
+    } else if (from) {
+      next[`${code}.gte`] = from[1];
+    } else if (upTo) {
+      next[`${code}.lte`] = upTo[1];
+    } else {
+      next[code] = t;
+    }
+  }
+  setFilters(next);
 }
 
 function FilterField({ def, filters, setFilters }: {
@@ -137,22 +178,17 @@ function FilterField({ def, filters, setFilters }: {
     );
   }
 
-  // NUMERIC → range (min/max)
+  // NUMERIC → jedno pole: přesná hodnota nebo rozsah (AT-001: „12" hledá přímo D12)
   if (def.data_type && RANGE_TYPES.has(def.data_type)) {
     return (
-      <div className="grid grid-cols-2 gap-1">
-        <div>
-          <Label className="text-xs truncate" title={def.param_code}>{label}{unit}{req} min</Label>
-          <Input className="mt-1" type="number" step="any"
-            value={filters[`${def.param_code}.gte`] ?? ""}
-            onChange={(e) => setFilters({ ...filters, [`${def.param_code}.gte`]: e.target.value })} />
-        </div>
-        <div>
-          <Label className="text-xs truncate">max</Label>
-          <Input className="mt-1" type="number" step="any"
-            value={filters[`${def.param_code}.lte`] ?? ""}
-            onChange={(e) => setFilters({ ...filters, [`${def.param_code}.lte`]: e.target.value })} />
-        </div>
+      <div>
+        <Label className="text-xs truncate" title={`${def.param_code} · 12 = přesně, 10-14 = rozsah, 12+ = od, -14 = do`}>
+          {label}{unit}{req}
+        </Label>
+        <Input className="mt-1" type="text" inputMode="decimal"
+          placeholder="12 · 10-14 · 12+"
+          value={numericDisplay(filters, def.param_code)}
+          onChange={(e) => setNumericFilter(filters, setFilters, def.param_code, e.target.value)} />
       </div>
     );
   }

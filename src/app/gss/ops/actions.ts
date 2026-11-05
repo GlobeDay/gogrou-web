@@ -7,6 +7,7 @@ import { inferStatusFromMovement } from "@/lib/scan-logic";
 import { loadGssContext, pickLocation, revalidateGss, type GssCtx } from "@/lib/gss-context";
 import {
   asLifecycle,
+  inheritLifecycle,
   mergeLifecycle,
   newQid,
   newReleaseCode,
@@ -201,7 +202,9 @@ export async function receiveBatch(input: {
   for (let i = 0; i < qty; i++) {
     const stamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
     const dm = `${ctx.tenantPrefix}-RCV-${stamp}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
-    const lifecycle = mergeLifecycle(sibling?.lifecycle, { condition: "new" });
+    // QID vzniká automaticky spolu s DM kusem (AT-009)
+    const qid = newQid(ctx.tenantPrefix);
+    const lifecycle = { ...inheritLifecycle(sibling?.lifecycle), condition: "new" as const, qid };
     const { data: piece, error: insErr } = await ctx.sb
       .from("gss_pieces")
       .insert({
@@ -209,6 +212,8 @@ export async function receiveBatch(input: {
         item_id: input.itemId,
         dm_code: dm,
         status: "in_stock",
+        condition: "new",
+        qid,
         current_location_id: main.id,
         lifecycle: lifecycle as never,
       })
@@ -340,6 +345,7 @@ export async function returnFromProduction(
       current_location_id: toId,
       status: newStatus,
       lifecycle: lifecycle as never,
+      ...(lifePatch.condition ? { condition: lifePatch.condition } : {}),
     })
     .eq("id", piece.id);
   if (updErr) return { ok: false, error: updErr.message };
@@ -447,7 +453,7 @@ export async function assignQid(dmCode: string, markPhysical: boolean): Promise<
   const lifecycle = mergeLifecycle(piece.lifecycle, { qid, marked: markPhysical || life.marked });
   const { error: updErr } = await ctx.sb
     .from("gss_pieces")
-    .update({ lifecycle: lifecycle as never })
+    .update({ lifecycle: lifecycle as never, qid })
     .eq("id", piece.id);
   if (updErr) return { ok: false, error: updErr.message };
   await insertMovement(ctx, {
@@ -475,6 +481,7 @@ export async function saveServiceParams(input: {
   const { data: piece, error } = await loadPiece(ctx, input.dmCode);
   if (error) return { ok: false, error: error.message };
   if (!piece) return { ok: false, error: "Kus nenalezen." };
+  const prevCycles = Number(asLifecycle(piece.lifecycle).sharpening?.cycles_done ?? 0);
   const lifecycle = mergeLifecycle(piece.lifecycle, {
     sharpening: {
       diameter_mm: Number(input.diameter_mm) || undefined,
@@ -490,6 +497,22 @@ export async function saveServiceParams(input: {
     .update({ lifecycle: lifecycle as never })
     .eq("id", piece.id);
   if (updErr) return { ok: false, error: updErr.message };
+
+  // Historie D/L1/L2 per servisní cyklus (AT-020) — lifecycle drží jen poslední stav
+  const { error: evErr } = await ctx.sb.from("gss_piece_service_events").insert({
+    tenant_id: ctx.tenantId,
+    piece_id: piece.id,
+    cycle_no: prevCycles + 1,
+    diameter_mm: Number(input.diameter_mm) || null,
+    l1_mm: Number(input.l1_mm) || null,
+    l2_mm: Number(input.l2_mm) || null,
+    performer: input.performer || null,
+    event_date: input.date || null,
+    notes: input.notes || null,
+    created_by: ctx.user.email ?? null,
+  });
+  if (evErr) return { ok: false, error: evErr.message };
+
   await insertMovement(ctx, {
     movement: "adjust",
     itemId: piece.item_id,
@@ -544,7 +567,12 @@ export async function receiveFromSharpening(dmCode: string): Promise<OpsResult> 
   });
   const { error: updErr } = await ctx.sb
     .from("gss_pieces")
-    .update({ status: "in_stock", current_location_id: main.id, lifecycle: lifecycle as never })
+    .update({
+      status: "in_stock",
+      current_location_id: main.id,
+      condition: "resharpened_new",
+      lifecycle: lifecycle as never,
+    })
     .eq("id", piece.id);
   if (updErr) return { ok: false, error: updErr.message };
   await insertMovement(ctx, {

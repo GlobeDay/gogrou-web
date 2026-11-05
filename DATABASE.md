@@ -323,6 +323,26 @@ erDiagram
 | **`gss_pieces`** | 54 | Fyzický kus s DataMatrix kódem. Status = lifecycle. | UQ `(tenant_id, dm_code)`, `lifecycle jsonb` |
 | **`gss_movements`** | 96 | Append-only audit log pohybů. | `(tenant_id, occurred_at DESC)` idx |
 
+### 4.2b Iterace 11/2026 — rozšíření po acceptance testu (3. 10. 2026)
+
+Nové sloupce:
+
+| Tabulka | Sloupce | Účel |
+|---|---|---|
+| **`gss_pieces`** | `condition piece_condition NOT NULL DEFAULT 'new'`, `qid text` (UQ per tenant, partial) | Kondice oddělená od lokace/statusu; QID vzniká automaticky s DM kusem |
+| **`gss_items`** | `tracking_mode item_tracking_mode DEFAULT 'dm'`, `qty_on_hand int` (pro non-DM), `pack_size int`, `supplier_primary`, `supplier_secondary` | non-DM/DM režim per položka, balení, dodavatelé |
+| **`gss_items`** | `gpc_product_id` nyní **nullable** + `local_name`, `local_manufacturer`, `local_type`, `local_params jsonb` + CHECK `ck_item_identity` | LOCAL/UNVALIDATED položka žije jen v GSS (AT-006) |
+
+Nové tabulky (všechny tenant-scoped RLS `*_tenant_scope`):
+
+| Tabulka | Účel |
+|---|---|
+| **`gss_item_external_ids`** | Externí identifikátory položky (SAP/ERP/automat…): `system`, `value`, `source`, `active`; UQ `(tenant_id, system, value)`; mapovací vrstva zákazník ↔ GSS/GPC |
+| **`gss_orders`** + **`gss_order_lines`** | Systémové objednávky: `order_no` (UQ/tenant), `supplier`, `status gss_order_status`; řádky `qty_ordered` / `qty_received` → ordered/received/remaining |
+| **`gss_service_shipments`** + **`gss_service_shipment_lines`** | Servisní zásilky jako entita (dřív jen movement payload): `direction` (to_service/return), `status`, `partner`, `return_of` self-FK; řádky s `piece_id` (DM) nebo `item_id`+`qty` (non-DM), `result` |
+| **`gss_piece_service_events`** | Historie D/L1/L2 per servisní cyklus: `cycle_no`, `diameter_mm`, `l1_mm`, `l2_mm`, `performer`, `event_date`, FK `shipment_id` |
+| **`gss_gpc_validation_requests`** | Proces „Odeslat k ověření do GPC" pro lokální položky: `status` (pending/approved/rejected/linked), `attachments jsonb`, výsledný `gpc_product_id` |
+
 ### 4.3 Auth vrstva
 
 | Tabulka | Řádků | Účel | Klíčové sloupce |
@@ -334,10 +354,14 @@ erDiagram
 ## 5. Enums
 
 ```sql
-entity_status   = active | phasing_out | discontinued
-piece_status    = new | in_stock | in_preset | in_machine | in_production | in_service | scrapped
-movement_type   = receive | issue | transfer | service_out | service_in | scrap | adjust
-tenant_role     = viewer | operator | supervisor | admin
+entity_status      = active | phasing_out | discontinued
+piece_status       = new | in_stock | in_preset | in_machine | in_production | in_service | scrapped
+piece_condition    = new | resharpened_new | used
+item_tracking_mode = quantity | dm
+movement_type      = receive | issue | transfer | service_out | service_in | scrap | adjust
+gss_order_status   = draft | ordered | partially_received | received | cancelled
+shipment_direction = to_service | return
+tenant_role        = viewer | operator | supervisor | admin
 ```
 
 **Role capability matrix** (vynucováno v `src/lib/tenant.ts`):
