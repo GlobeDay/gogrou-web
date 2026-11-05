@@ -1,17 +1,18 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
-  ArrowDownToLine, ArrowUpFromLine, Bookmark, PackagePlus, RotateCcw, ScanLine,
+  ArrowDownToLine, ArrowUpFromLine, Bookmark, Gavel, PackagePlus, RotateCcw, ScanLine,
   Search, Send, ShoppingCart, Stamp, Tags, Truck, Warehouse, Wrench,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getServerUser } from "@/lib/supabase-server";
+import { getServerSupabase, getServerUser } from "@/lib/supabase-server";
 import { getActiveTenant } from "@/lib/tenant";
 
 const TILES = [
   { href: "/gss/terminal/receive", title: "Příjem", desc: "Naskladnit s dokladem", icon: ArrowDownToLine },
   { href: "/gss/terminal/issue", title: "Výdej", desc: "Výdej do výroby", icon: ArrowUpFromLine },
-  { href: "/gss/terminal/return", title: "Návrat z výroby", desc: "Pět rozhodnutí po návratu", icon: RotateCcw },
+  { href: "/gss/terminal/return", title: "Návrat z výroby", desc: "Do fronty, nebo rozhodnout hned", icon: RotateCcw },
+  { href: "/gss/decisions", title: "Čeká na rozhodnutí", desc: "Rozhodovací fronta", icon: Gavel },
   { href: "/gss/terminal/reserve", title: "Rezervace", desc: "DM + release kód", icon: Bookmark },
   { href: "/gss/service", title: "Odeslat / příjem z broušení", desc: "Servisní terminál", icon: Wrench },
   { href: "/gss/scan", title: "Načíst DM/QID", desc: "Scan terminál", icon: ScanLine },
@@ -32,6 +33,21 @@ export default async function TerminalPage() {
   if (!user) redirect("/login?next=/gss/terminal");
   const tenant = await getActiveTenant();
 
+  // Počet kusů v rozhodovací frontě pro badge na dlaždici (P4)
+  let awaiting = 0;
+  if (tenant) {
+    const sb = await getServerSupabase();
+    const { data: tenantRow } = await sb.from("gss_tenants").select("id").eq("prefix", tenant).maybeSingle();
+    if (tenantRow) {
+      const { count } = await sb
+        .from("gss_pieces")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", tenantRow.id)
+        .eq("status", "awaiting_decision");
+      awaiting = count ?? 0;
+    }
+  }
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 space-y-4">
       <div>
@@ -50,7 +66,9 @@ export default async function TerminalPage() {
                   <tile.icon className="h-4 w-4" />
                   {tile.title}
                 </CardDescription>
-                <CardTitle className="text-base">{tile.desc}</CardTitle>
+                <CardTitle className="text-base">
+                  {tile.href === "/gss/decisions" && awaiting > 0 ? `${awaiting} ks ve frontě` : tile.desc}
+                </CardTitle>
               </CardHeader>
               <CardContent />
             </Card>

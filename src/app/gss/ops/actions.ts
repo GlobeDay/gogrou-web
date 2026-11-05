@@ -13,6 +13,7 @@ import {
   newQid,
   newReleaseCode,
   ORDER_STATUS_LABELS,
+  RETURN_DECISION_LABELS,
   type DocumentType,
   type OverstockOffer,
   type PieceLifecycle,
@@ -708,18 +709,18 @@ export async function issuePieces(
   return { ok: true, message: `Výdej ${dmCodes.length} ks do výroby.` };
 }
 
-export async function returnFromProduction(
-  dmCode: string,
+/**
+ * Sdílené jádro rozhodnutí o kusu — používá ho okamžité rozhodnutí na
+ * návratovém terminálu i rozhodovací fronta (P4). Rozhodnutí spouští
+ * workflow: sklad / broušení / vyřazení / blokace.
+ */
+async function applyReturnDecision(
+  ctx: GssCtx,
+  piece: NonNullable<Awaited<ReturnType<typeof loadPiece>>["data"]>,
   decision: ReturnDecision,
   note: string,
+  kind: "production_return" | "decision_queue",
 ): Promise<OpsResult> {
-  const loaded = await loadGssContext();
-  if (!loaded.ok) return loaded;
-  const { ctx } = loaded;
-  const { data: piece, error } = await loadPiece(ctx, dmCode);
-  if (error) return { ok: false, error: error.message };
-  if (!piece) return { ok: false, error: `DM ${dmCode} nenalezeno.` };
-
   const main = pickLocation(ctx.locations, "MAIN");
   const service = pickLocation(ctx.locations, "SERVICE_BIN", "SERVICE");
   if (!main) return { ok: false, error: "Lokace MAIN chybí." };
@@ -783,11 +784,83 @@ export async function returnFromProduction(
     pieceId: piece.id,
     fromId: piece.current_location_id,
     toId,
-    payload: { source: "lock_parity", kind: "production_return", decision, note },
+    payload: {
+      source: "lock_parity",
+      kind,
+      decision,
+      note,
+      ...(kind === "decision_queue" ? { decided_by: ctx.user.email } : {}),
+    },
   });
   if (mv.error) return { ok: false, error: mv.error.message };
   revalidateGss(piece.item_id);
-  return { ok: true, message: `Návrat ${dmCode} uložen.`, dm_code: dmCode };
+  const message =
+    kind === "decision_queue"
+      ? `${piece.dm_code}: ${RETURN_DECISION_LABELS[decision]}.`
+      : `Návrat ${piece.dm_code} uložen.`;
+  return { ok: true, message, dm_code: piece.dm_code };
+}
+
+export async function returnFromProduction(
+  dmCode: string,
+  decision: ReturnDecision | "await_decision",
+  note: string,
+): Promise<OpsResult> {
+  const loaded = await loadGssContext();
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  const { data: piece, error } = await loadPiece(ctx, dmCode);
+  if (error) return { ok: false, error: error.message };
+  if (!piece) return { ok: false, error: `DM ${dmCode} nenalezeno.` };
+
+  // P4: výchozí tok — kus se fyzicky vrátí na sklad ve stavu ČEKÁ NA
+  // ROZHODNUTÍ a rozhodnutí padne později v rozhodovací frontě.
+  if (decision === "await_decision") {
+    const main = pickLocation(ctx.locations, "MAIN");
+    if (!main) return { ok: false, error: "Lokace MAIN chybí." };
+    const lifecycle = mergeLifecycle(piece.lifecycle, { condition: "used" });
+    const { error: updErr } = await ctx.sb
+      .from("gss_pieces")
+      .update({
+        current_location_id: main.id,
+        status: "awaiting_decision",
+        lifecycle: lifecycle as never,
+        condition: "used",
+      })
+      .eq("id", piece.id);
+    if (updErr) return { ok: false, error: updErr.message };
+    const mv = await insertMovement(ctx, {
+      movement: "transfer",
+      itemId: piece.item_id,
+      pieceId: piece.id,
+      fromId: piece.current_location_id,
+      toId: main.id,
+      payload: { source: "lock_parity", kind: "production_return", decision: "awaiting_decision", note },
+    });
+    if (mv.error) return { ok: false, error: mv.error.message };
+    revalidateGss(piece.item_id);
+    return { ok: true, message: `${dmCode} zařazen do rozhodovací fronty.`, dm_code: dmCode };
+  }
+
+  return applyReturnDecision(ctx, piece, decision, note, "production_return");
+}
+
+/** P4: rozhodnutí z fronty ČEKÁ NA ROZHODNUTÍ — supervisor a vyšší. */
+export async function decidePiece(
+  dmCode: string,
+  decision: ReturnDecision,
+  note: string,
+): Promise<OpsResult> {
+  const loaded = await loadGssContext("gss.edit_lifecycle");
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  const { data: piece, error } = await loadPiece(ctx, dmCode);
+  if (error) return { ok: false, error: error.message };
+  if (!piece) return { ok: false, error: `DM ${dmCode} nenalezeno.` };
+  if (piece.status !== "awaiting_decision") {
+    return { ok: false, error: `${dmCode} není ve frontě ČEKÁ NA ROZHODNUTÍ.` };
+  }
+  return applyReturnDecision(ctx, piece, decision, note, "decision_queue");
 }
 
 export async function reservePiece(input: {

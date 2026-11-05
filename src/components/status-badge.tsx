@@ -10,6 +10,7 @@ const STATUS_VARIANT: Record<string, Variant> = {
   in_preset:     "neutral",
   in_machine:    "info",
   in_production: "info",
+  awaiting_decision: "warning",
   in_service:    "warning",
   scrapped:      "destructive",
   // entity_status
@@ -32,6 +33,7 @@ const STATUS_LABEL_CS: Record<string, string> = {
   in_preset:     "Preset",
   in_machine:    "Stroj",
   in_production: "Výroba",
+  awaiting_decision: "Čeká na rozhodnutí",
   in_service:    "Servis",
   scrapped:      "Vyřazeno",
   active:        "Aktivní",

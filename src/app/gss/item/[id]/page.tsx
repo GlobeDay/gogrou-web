@@ -22,7 +22,8 @@ export const dynamic = "force-dynamic";
 
 const STATUS_LABELS: Record<string, string> = {
   new: "Nový", in_stock: "Sklad", in_preset: "Preset",
-  in_machine: "Stroj", in_production: "Výroba", in_service: "Servis", scrapped: "Vyřazeno",
+  in_machine: "Stroj", in_production: "Výroba", awaiting_decision: "Čeká na rozhodnutí",
+  in_service: "Servis", scrapped: "Vyřazeno",
 };
 
 export default async function ItemDetailPage({ params }: { params: Params }) {
@@ -170,7 +171,7 @@ export default async function ItemDetailPage({ params }: { params: Params }) {
             </CardHeader>
           </Card>
         )}
-        {["in_stock", "in_machine", "in_preset", "in_service", "in_production", "scrapped"].map((s) => (
+        {["in_stock", "in_machine", "in_preset", "in_service", "in_production", "awaiting_decision", "scrapped"].map((s) => (
           <Card key={s} className={s === "in_stock" && isLowStock && !quantityMode ? "border-destructive" : ""}>
             <CardHeader className="pb-1">
               <CardDescription className="text-2xs uppercase tracking-wide">{STATUS_LABELS[s]}</CardDescription>

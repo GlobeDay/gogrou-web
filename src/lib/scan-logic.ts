@@ -28,7 +28,10 @@ export interface PieceForScan {
 }
 
 export function computeNextAction(piece: PieceForScan, event?: ScanEvent): NextAction {
-  const lifecycle   = (piece.lifecycle ?? {}) as Record<string, any>;
+  const lifecycle = (piece.lifecycle ?? {}) as {
+    sharpening?: { cycles_done?: number; max_cycles?: number };
+    instructions?: { on_return_from_machine?: string; service_location_code?: string; label_code?: string };
+  };
   const sharpening  = lifecycle.sharpening   ?? {};
   const instructions = lifecycle.instructions ?? {};
 
@@ -91,6 +94,18 @@ export function computeNextAction(piece: PieceForScan, event?: ScanEvent): NextA
       instructions: [
         "Po servisu — zkontroluj rozměr a stav.",
         "Aktualizuj lifecycle.dimensions.current_diameter_mm.",
+      ],
+    };
+  }
+
+  if (piece.status === "awaiting_decision") {
+    return {
+      code: "AWAITING_DECISION",
+      title: "Kus čeká na rozhodnutí",
+      severity: "warning",
+      instructions: [
+        "Kus je po návratu z výroby v rozhodovací frontě.",
+        "Rozhodnutí (sklad / broušení / vyřazení / blokace) proveď na stránce Čeká na rozhodnutí.",
       ],
     };
   }

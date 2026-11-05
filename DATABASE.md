@@ -343,6 +343,10 @@ Nové tabulky (všechny tenant-scoped RLS `*_tenant_scope`):
 | **`gss_piece_service_events`** | Historie D/L1/L2 per servisní cyklus: `cycle_no`, `diameter_mm`, `l1_mm`, `l2_mm`, `performer`, `event_date`, FK `shipment_id` |
 | **`gss_gpc_validation_requests`** | Proces „Odeslat k ověření do GPC" pro lokální položky: `status` (pending/approved/rejected/linked), `attachments jsonb`, výsledný `gpc_product_id` |
 
+Rozšíření enumů (P4): `piece_status` dostal hodnotu **`awaiting_decision`** — kus po návratu
+z výroby čeká v rozhodovací frontě (`/gss/decisions`); rozhodnutí spouští workflow.
+Migrace: `ALTER TYPE piece_status ADD VALUE IF NOT EXISTS 'awaiting_decision' AFTER 'in_production';`
+
 ### 4.3 Auth vrstva
 
 | Tabulka | Řádků | Účel | Klíčové sloupce |
@@ -355,7 +359,7 @@ Nové tabulky (všechny tenant-scoped RLS `*_tenant_scope`):
 
 ```sql
 entity_status      = active | phasing_out | discontinued
-piece_status       = new | in_stock | in_preset | in_machine | in_production | in_service | scrapped
+piece_status       = new | in_stock | in_preset | in_machine | in_production | awaiting_decision | in_service | scrapped
 piece_condition    = new | resharpened_new | used
 item_tracking_mode = quantity | dm
 movement_type      = receive | issue | transfer | service_out | service_in | scrap | adjust

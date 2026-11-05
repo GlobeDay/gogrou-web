@@ -10,7 +10,7 @@ type Piece = { dm_code: string; status: string; location: string | null };
 
 export function ReturnForm({ pieces }: { pieces: Piece[] }) {
   const [dm, setDm] = useState(pieces[0]?.dm_code ?? "");
-  const [decision, setDecision] = useState<ReturnDecision>("return_used");
+  const [decision, setDecision] = useState<ReturnDecision | "await_decision">("await_decision");
   const [note, setNote] = useState("");
 
   return (
@@ -23,10 +23,16 @@ export function ReturnForm({ pieces }: { pieces: Piece[] }) {
         </select>
       </Field>
       <Field label="Rozhodnutí">
-        <select className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm" value={decision} onChange={(e) => setDecision(e.target.value as ReturnDecision)}>
+        <select className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm" value={decision} onChange={(e) => setDecision(e.target.value as ReturnDecision | "await_decision")}>
+          <option value="await_decision">ČEKÁ NA ROZHODNUTÍ — rozhodne se ve frontě</option>
           {Object.entries(RETURN_DECISION_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
       </Field>
+      {decision === "await_decision" && (
+        <p className="text-xs text-muted-foreground">
+          Kus se fyzicky vrátí na sklad a objeví se v rozhodovací frontě (Čeká na rozhodnutí).
+        </p>
+      )}
       <Field label="Poznámka">
         <Input value={note} onChange={(e) => setNote(e.target.value)} />
       </Field>

@@ -1235,6 +1235,7 @@ export type Database = {
         | "in_preset"
         | "in_machine"
         | "in_production"
+        | "awaiting_decision"
         | "in_service"
         | "scrapped"
       shipment_direction: "to_service" | "return"
@@ -1391,6 +1392,7 @@ export const Constants = {
         "in_preset",
         "in_machine",
         "in_production",
+        "awaiting_decision",
         "in_service",
         "scrapped",
       ],
