@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   ArrowDownToLine, ArrowUpFromLine, Bookmark, PackagePlus, RotateCcw, ScanLine,
-  Send, Stamp, Tags, Truck, Warehouse, Wrench,
+  Search, Send, ShoppingCart, Stamp, Tags, Truck, Warehouse, Wrench,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { getServerUser } from "@/lib/supabase-server";
@@ -15,6 +15,8 @@ const TILES = [
   { href: "/gss/terminal/reserve", title: "Rezervace", desc: "DM + release kód", icon: Bookmark },
   { href: "/gss/service", title: "Odeslat / příjem z broušení", desc: "Servisní terminál", icon: Wrench },
   { href: "/gss/scan", title: "Načíst DM/QID", desc: "Scan terminál", icon: ScanLine },
+  { href: "/gss/search", title: "Hledat", desc: "Univerzální hledání", icon: Search },
+  { href: "/gss/orders", title: "Objednávky", desc: "Návrhy a příjem na objednávku", icon: ShoppingCart },
   { href: "/gss/adopt", title: "Vyhledat v GPC", desc: "Převzít do skladu", icon: PackagePlus },
   { href: "/gss/local-item", title: "Lokální položka", desc: "Nevalidovaná SKU", icon: Stamp },
   { href: "/gss/overstock", title: "Nadnormativní zásoby", desc: "Nabídka přebytku", icon: Tags },

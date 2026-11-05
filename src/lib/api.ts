@@ -53,6 +53,18 @@ export function scan(input: {
   return call<ScanResponse>("/api/gss/scan", { method: "POST", body: JSON.stringify(input) });
 }
 
+// ---------- GSS univerzální hledání ----------
+export interface GssSearchResponse {
+  items: Array<{ item_id: string; gid: string; name: string; manufacturer: string | null; type: string; is_local: boolean }>;
+  catalog: Array<{ product_id: string; gid: string; name: string; manufacturer: string | null; type: string }>;
+  pieces: Array<{ dm_code: string; qid: string | null; status: string; item_id: string; name: string }>;
+  external: Array<{ system: string; value: string; item_id: string; name: string }>;
+}
+
+export function searchGss(q: string) {
+  return call<GssSearchResponse>(`/api/gss/search?q=${encodeURIComponent(q)}`);
+}
+
 // ---------- GSS move ----------
 export function move(input: {
   tenant_prefix: string;

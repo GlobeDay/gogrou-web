@@ -33,7 +33,10 @@ export default async function LowStockPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-6 space-y-4">
       <div className="flex items-baseline justify-between flex-wrap gap-2">
-        <h1 className="text-2xl font-bold tracking-tight">Low stock</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold tracking-tight">Low stock</h1>
+          <Link href="/gss/orders" className="text-sm underline">Objednávky</Link>
+        </div>
         <div className="flex items-center gap-3">
           <span className="text-sm text-muted-foreground">
             tenant <span className="font-mono">{tenant}</span> · {items.length} pod reorder · {generatedAt.toLocaleString("cs-CZ")}
@@ -60,11 +63,13 @@ export default async function LowStockPage() {
               <TableRow>
                 <TableHead>Produkt</TableHead>
                 <TableHead className="w-[100px]">Type</TableHead>
-                <TableHead className="text-right w-[100px]">In stock</TableHead>
-                <TableHead className="text-right w-[100px]">In machine</TableHead>
-                <TableHead className="text-right w-[100px]">In service</TableHead>
-                <TableHead className="text-right w-[100px]">Reorder</TableHead>
-                <TableHead className="text-right w-[100px]">Suggested qty</TableHead>
+                <TableHead className="w-[140px]">Dodavatel</TableHead>
+                <TableHead className="text-right w-[90px]">In stock</TableHead>
+                <TableHead className="text-right w-[90px]">In machine</TableHead>
+                <TableHead className="text-right w-[90px]">In service</TableHead>
+                <TableHead className="text-right w-[90px]">Reorder</TableHead>
+                <TableHead className="text-right w-[90px]">Suggested</TableHead>
+                <TableHead className="text-right w-[110px]">Objednat (balení)</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -79,16 +84,20 @@ export default async function LowStockPage() {
                       </Link>
                     </TableCell>
                     <TableCell><Badge variant="outline" className="font-mono text-xs">{it.type}</Badge></TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{it.supplier_primary ?? "—"}</TableCell>
                     <TableCell className={`text-right font-mono ${critical ? "text-destructive font-bold" : ""}`}>{it.in_stock_qty}</TableCell>
                     <TableCell className="text-right font-mono text-muted-foreground">{it.in_production_qty}</TableCell>
                     <TableCell className="text-right font-mono text-muted-foreground">{it.in_service_qty}</TableCell>
                     <TableCell className="text-right font-mono">{it.reorder_point ?? "—"}</TableCell>
-                    <TableCell className="text-right font-mono font-semibold">{it.suggested_qty}</TableCell>
+                    <TableCell className="text-right font-mono text-muted-foreground">{it.suggested_qty}</TableCell>
+                    <TableCell className="text-right font-mono font-semibold">
+                      {it.order_qty}{it.pack_size && it.pack_size > 1 ? <span className="text-2xs text-muted-foreground"> /{it.pack_size}</span> : null}
+                    </TableCell>
                   </TableRow>
                 );
               })}
               {items.length === 0 && !err && (
-                <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Žádné položky pod reorder.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="py-8 text-center text-muted-foreground">Žádné položky pod reorder.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>

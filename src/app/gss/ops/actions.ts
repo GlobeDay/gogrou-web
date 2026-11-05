@@ -5,12 +5,14 @@ import { getServerSupabase } from "@/lib/supabase-server";
 import { can, getActiveTenant } from "@/lib/tenant";
 import { inferStatusFromMovement } from "@/lib/scan-logic";
 import { loadGssContext, pickLocation, revalidateGss, type GssCtx } from "@/lib/gss-context";
+import { computeLowStock } from "@/lib/low-stock";
 import {
   asLifecycle,
   inheritLifecycle,
   mergeLifecycle,
   newQid,
   newReleaseCode,
+  ORDER_STATUS_LABELS,
   type DocumentType,
   type OverstockOffer,
   type PieceLifecycle,
@@ -65,6 +67,24 @@ async function loadItem(ctx: GssCtx, itemId: string) {
     .eq("id", itemId)
     .eq("tenant_id", ctx.tenantId)
     .maybeSingle();
+}
+
+type LoadedItem = NonNullable<Awaited<ReturnType<typeof loadItem>>["data"]>;
+
+/**
+ * Kontrola příjmu nad Max (P3 akceptačního reportu): dostupnost je všude
+ * qty_on_hand + fyzické kusy in_stock, aby fungovalo i míchání režimů.
+ */
+async function checkOverMax(ctx: GssCtx, item: LoadedItem, qty: number) {
+  if (item.max_qty == null) return { exceeds: false, available: 0, max: null as number | null };
+  const { count } = await ctx.sb
+    .from("gss_pieces")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", ctx.tenantId)
+    .eq("item_id", item.id)
+    .eq("status", "in_stock");
+  const available = (item.qty_on_hand ?? 0) + (count ?? 0);
+  return { exceeds: available + qty > item.max_qty, available, max: item.max_qty };
 }
 
 async function loadPiece(ctx: { sb: Awaited<ReturnType<typeof getServerSupabase>>; tenantId: string }, dmCode: string) {
@@ -221,26 +241,18 @@ export async function updateItemPolicy(input: {
   return { ok: true, message: "Nastavení položky uloženo." };
 }
 
-export async function receiveBatch(input: {
-  itemId: string;
-  qty: number;
-  source: ReceiptSource;
-  document_type: DocumentType;
-  doc_no: string;
-}): Promise<OpsResult> {
-  const loaded = await loadGssContext();
-  if (!loaded.ok) return loaded;
-  const { ctx } = loaded;
-  const qty = Math.floor(input.qty);
-  if (!Number.isFinite(qty) || qty < 1 || qty > 50) {
-    return { ok: false, error: "Množství musí být 1–50." };
-  }
+/**
+ * Jádro příjmu sdílené receiveBatch (volný příjem) a receiveOrderLine
+ * (párovaný příjem na objednávku). Payload nese doklad + audit overridů.
+ */
+async function performReceive(
+  ctx: GssCtx,
+  item: LoadedItem,
+  qty: number,
+  payload: Record<string, unknown>,
+): Promise<OpsResult> {
   const main = pickLocation(ctx.locations, "MAIN");
   if (!main) return { ok: false, error: "Lokace MAIN chybí." };
-
-  const { data: item, error: itemErr } = await loadItem(ctx, input.itemId);
-  if (itemErr) return { ok: false, error: itemErr.message };
-  if (!item) return { ok: false, error: "Položka nenalezena." };
 
   // Množstevní (non-DM) režim: žádné kusy, jen qty_on_hand + jeden pohyb s quantity
   if (item.tracking_mode === "quantity") {
@@ -256,14 +268,7 @@ export async function receiveBatch(input: {
       itemId: item.id,
       toId: main.id,
       quantity: qty,
-      payload: {
-        source: "lock_parity",
-        kind: "receive",
-        mode: "quantity",
-        receipt_source: input.source,
-        document_type: input.document_type,
-        doc_no: input.doc_no,
-      },
+      payload: { ...payload, mode: "quantity" },
     });
     if (mv.error) {
       await ctx.sb
@@ -273,14 +278,13 @@ export async function receiveBatch(input: {
         .eq("tenant_id", ctx.tenantId);
       return { ok: false, error: mv.error.message };
     }
-    revalidateGss(item.id);
     return { ok: true, message: `Příjem +${qty} (bez DM), skladem ${newQty}.` };
   }
 
   const { data: sibling } = await ctx.sb
     .from("gss_pieces")
     .select("lifecycle")
-    .eq("item_id", input.itemId)
+    .eq("item_id", item.id)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -296,7 +300,7 @@ export async function receiveBatch(input: {
       .from("gss_pieces")
       .insert({
         tenant_id: ctx.tenantId,
-        item_id: input.itemId,
+        item_id: item.id,
         dm_code: dm,
         status: "in_stock",
         condition: "new",
@@ -309,16 +313,10 @@ export async function receiveBatch(input: {
     if (insErr || !piece) return { ok: false, error: insErr?.message ?? "Příjem kusu selhal." };
     const mv = await insertMovement(ctx, {
       movement: "receive",
-      itemId: input.itemId,
+      itemId: item.id,
       pieceId: piece.id,
       toId: main.id,
-      payload: {
-        source: "lock_parity",
-        kind: "receive",
-        receipt_source: input.source,
-        document_type: input.document_type,
-        doc_no: input.doc_no,
-      },
+      payload,
     });
     if (mv.error) {
       await ctx.sb.from("gss_pieces").delete().eq("id", piece.id);
@@ -326,8 +324,282 @@ export async function receiveBatch(input: {
     }
     created.push(dm);
   }
-  revalidateGss(input.itemId);
   return { ok: true, message: `Příjem +${created.length}`, dm_code: created[0] };
+}
+
+export async function receiveBatch(input: {
+  itemId: string;
+  qty: number;
+  source: ReceiptSource;
+  document_type: DocumentType;
+  doc_no: string;
+  allow_over_max?: boolean;
+}): Promise<OpsResult> {
+  const loaded = await loadGssContext();
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  const qty = Math.floor(input.qty);
+  if (!Number.isFinite(qty) || qty < 1 || qty > 50) {
+    return { ok: false, error: "Množství musí být 1–50." };
+  }
+
+  const { data: item, error: itemErr } = await loadItem(ctx, input.itemId);
+  if (itemErr) return { ok: false, error: itemErr.message };
+  if (!item) return { ok: false, error: "Položka nenalezena." };
+
+  const over = await checkOverMax(ctx, item, qty);
+  if (over.exceeds && !input.allow_over_max) {
+    return {
+      ok: false,
+      error: `Příjem překročí Max (${over.available}+${qty} > ${over.max}). Potvrď „Povolit příjem nad Max“.`,
+    };
+  }
+
+  const res = await performReceive(ctx, item, qty, {
+    source: "lock_parity",
+    kind: "receive",
+    receipt_source: input.source,
+    document_type: input.document_type,
+    doc_no: input.doc_no,
+    // Audit overridu + stav kontroly příjemky (P3: doklady, „čeká na kontrolu“)
+    ...(over.exceeds ? { over_max: true, overridden_by: ctx.user.email ?? null } : {}),
+    check_status: !input.doc_no.trim() || over.exceeds ? "pending" : "ok",
+  });
+  if (res.ok) revalidateGss(item.id);
+  return res;
+}
+
+// ---------- Objednávky (P3 akceptačního reportu) ----------
+
+type OrderStatusEnum = Database["public"]["Enums"]["gss_order_status"];
+
+/**
+ * Z low-stock návrhu založí koncepty objednávek seskupené podle primárního
+ * dodavatele; množství zaokrouhlené nahoru na pack_size. Položky, které už
+ * jsou na otevřené objednávce, se nenavrhují znovu.
+ */
+export async function createOrdersFromLowStock(): Promise<OpsResult> {
+  const loaded = await loadGssContext("gss.edit_lifecycle");
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+
+  let low: Awaited<ReturnType<typeof computeLowStock>>;
+  try {
+    low = await computeLowStock(ctx.sb, ctx.tenantId);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  if (low.length === 0) return { ok: false, error: "Nic pod reorder pointem — není co objednat." };
+
+  const { data: openLines, error: olErr } = await ctx.sb
+    .from("gss_order_lines")
+    .select("item_id, qty_ordered, qty_received, order:gss_orders!inner(status)")
+    .eq("tenant_id", ctx.tenantId)
+    .in("order.status", ["draft", "ordered", "partially_received"]);
+  if (olErr) return { ok: false, error: olErr.message };
+  const onOrder = new Set(
+    (openLines ?? [])
+      .filter((l) => (l.qty_received ?? 0) < l.qty_ordered)
+      .map((l) => l.item_id),
+  );
+
+  const toOrder = low.filter((l) => l.order_qty > 0 && !onOrder.has(l.item_id));
+  if (toOrder.length === 0) {
+    return { ok: false, error: "Všechny položky pod reorderem už jsou na otevřené objednávce." };
+  }
+
+  const groups = new Map<string, typeof toOrder>();
+  for (const l of toOrder) {
+    const key = l.supplier_primary?.trim() || "(bez dodavatele)";
+    groups.set(key, [...(groups.get(key) ?? []), l]);
+  }
+
+  const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  let created = 0;
+  for (const [supplier, lines] of groups) {
+    const orderNo = `ORD-${ctx.tenantPrefix}-${stamp}-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+    const { data: order, error } = await ctx.sb
+      .from("gss_orders")
+      .insert({
+        tenant_id: ctx.tenantId,
+        order_no: orderNo,
+        supplier,
+        status: "draft",
+        created_by: ctx.user.email ?? null,
+      })
+      .select("id")
+      .single();
+    if (error || !order) return { ok: false, error: error?.message ?? "Založení objednávky selhalo." };
+    const { error: lErr } = await ctx.sb.from("gss_order_lines").insert(
+      lines.map((l) => ({
+        tenant_id: ctx.tenantId,
+        order_id: order.id,
+        item_id: l.item_id,
+        qty_ordered: l.order_qty,
+        note:
+          l.pack_size && l.pack_size > 1 && l.order_qty !== l.suggested_qty
+            ? `Návrh ${l.suggested_qty} ks, zaokrouhleno na balení po ${l.pack_size}`
+            : null,
+      })),
+    );
+    if (lErr) {
+      await ctx.sb.from("gss_orders").delete().eq("id", order.id);
+      return { ok: false, error: lErr.message };
+    }
+    created++;
+  }
+  revalidatePath("/gss/orders");
+  return {
+    ok: true,
+    message: `Vytvořeno ${created} ${created === 1 ? "koncept" : created < 5 ? "koncepty" : "konceptů"} objednávek (${toOrder.length} položek, podle dodavatele).`,
+  };
+}
+
+export async function setOrderStatus(
+  orderId: string,
+  status: Extract<OrderStatusEnum, "ordered" | "cancelled">,
+): Promise<OpsResult> {
+  const loaded = await loadGssContext("gss.edit_lifecycle");
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+
+  const { data: order, error } = await ctx.sb
+    .from("gss_orders")
+    .select("id, order_no, status")
+    .eq("id", orderId)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
+  if (error) return { ok: false, error: error.message };
+  if (!order) return { ok: false, error: "Objednávka nenalezena." };
+
+  const allowedFrom: OrderStatusEnum[] =
+    status === "ordered" ? ["draft"] : ["draft", "ordered", "partially_received"];
+  if (!allowedFrom.includes(order.status)) {
+    return { ok: false, error: `Ze stavu „${ORDER_STATUS_LABELS[order.status]}“ tahle změna nejde.` };
+  }
+
+  const { error: updErr } = await ctx.sb
+    .from("gss_orders")
+    .update({ status })
+    .eq("id", order.id)
+    .eq("tenant_id", ctx.tenantId);
+  if (updErr) return { ok: false, error: updErr.message };
+
+  revalidatePath("/gss/orders");
+  revalidatePath(`/gss/orders/${order.id}`);
+  return {
+    ok: true,
+    message:
+      status === "ordered"
+        ? `Objednávka ${order.order_no} označena jako odeslaná dodavateli.`
+        : `Objednávka ${order.order_no} zrušena.`,
+  };
+}
+
+/**
+ * Párovaný příjem na řádek objednávky: hlídá zbývající množství
+ * (partial/over-receipt s override a auditem), kontrolu nad Max a po příjmu
+ * přepočítá stav objednávky (ordered → partially_received → received).
+ */
+export async function receiveOrderLine(input: {
+  lineId: string;
+  qty: number;
+  document_type: DocumentType;
+  doc_no: string;
+  allow_over_receipt?: boolean;
+  allow_over_max?: boolean;
+}): Promise<OpsResult> {
+  const loaded = await loadGssContext();
+  if (!loaded.ok) return loaded;
+  const { ctx } = loaded;
+  const qty = Math.floor(input.qty);
+  if (!Number.isFinite(qty) || qty < 1 || qty > 50) {
+    return { ok: false, error: "Množství musí být 1–50." };
+  }
+
+  const { data: line, error: lineErr } = await ctx.sb
+    .from("gss_order_lines")
+    .select("id, order_id, item_id, qty_ordered, qty_received, order:gss_orders!inner(id, order_no, status)")
+    .eq("id", input.lineId)
+    .eq("tenant_id", ctx.tenantId)
+    .maybeSingle();
+  if (lineErr) return { ok: false, error: lineErr.message };
+  if (!line) return { ok: false, error: "Řádek objednávky nenalezen." };
+  const order = line.order as unknown as { id: string; order_no: string; status: OrderStatusEnum };
+  if (order.status !== "ordered" && order.status !== "partially_received") {
+    return {
+      ok: false,
+      error: `Objednávka je ve stavu „${ORDER_STATUS_LABELS[order.status]}“ — příjem jde jen u odeslané objednávky.`,
+    };
+  }
+
+  const remaining = line.qty_ordered - (line.qty_received ?? 0);
+  const overReceipt = qty > remaining;
+  if (overReceipt && !input.allow_over_receipt) {
+    return {
+      ok: false,
+      error: `Objednáno ${line.qty_ordered} ks, zbývá přijmout ${Math.max(remaining, 0)}. Pro příjem navíc potvrď „Povolit over-receipt“.`,
+    };
+  }
+
+  const { data: item, error: itemErr } = await loadItem(ctx, line.item_id);
+  if (itemErr) return { ok: false, error: itemErr.message };
+  if (!item) return { ok: false, error: "Položka nenalezena." };
+
+  const over = await checkOverMax(ctx, item, qty);
+  if (over.exceeds && !input.allow_over_max) {
+    return {
+      ok: false,
+      error: `Příjem překročí Max (${over.available}+${qty} > ${over.max}). Potvrď „Povolit příjem nad Max“.`,
+    };
+  }
+
+  const res = await performReceive(ctx, item, qty, {
+    source: "lock_parity",
+    kind: "receive",
+    receipt_source: "gss_order",
+    document_type: input.document_type,
+    doc_no: input.doc_no,
+    order_id: order.id,
+    order_no: order.order_no,
+    order_line_id: line.id,
+    // Audit overridů + stav kontroly příjemky (P3: „čeká na kontrolu“)
+    ...(overReceipt ? { over_receipt: true } : {}),
+    ...(over.exceeds ? { over_max: true } : {}),
+    ...(overReceipt || over.exceeds ? { overridden_by: ctx.user.email ?? null } : {}),
+    check_status: !input.doc_no.trim() || overReceipt || over.exceeds ? "pending" : "ok",
+  });
+  if (!res.ok) return res;
+
+  const newReceived = (line.qty_received ?? 0) + qty;
+  const { error: updErr } = await ctx.sb
+    .from("gss_order_lines")
+    .update({ qty_received: newReceived })
+    .eq("id", line.id)
+    .eq("tenant_id", ctx.tenantId);
+  if (updErr) {
+    return { ok: false, error: `Příjem proběhl, ale zápis na objednávku selhal: ${updErr.message}` };
+  }
+
+  const { data: allLines } = await ctx.sb
+    .from("gss_order_lines")
+    .select("qty_ordered, qty_received")
+    .eq("order_id", order.id)
+    .eq("tenant_id", ctx.tenantId);
+  const complete = (allLines ?? []).every((l) => (l.qty_received ?? 0) >= l.qty_ordered);
+  await ctx.sb
+    .from("gss_orders")
+    .update({ status: complete ? "received" : "partially_received" })
+    .eq("id", order.id)
+    .eq("tenant_id", ctx.tenantId);
+
+  revalidatePath("/gss/orders");
+  revalidatePath(`/gss/orders/${order.id}`);
+  revalidateGss(item.id);
+  return {
+    ok: true,
+    message: `${res.message} Objednávka ${order.order_no}: ${newReceived}/${line.qty_ordered} ks${overReceipt ? " (over-receipt)" : ""}.`,
+  };
 }
 
 export type IssueDetails = { machine?: string; order?: string; cost_center?: string };

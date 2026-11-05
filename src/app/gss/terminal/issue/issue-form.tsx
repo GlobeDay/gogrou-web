@@ -5,12 +5,13 @@ import { Input } from "@/components/ui/input";
 import { issuePieces, issueQuantity, issueReserved, type IssueDetails } from "../../ops/actions";
 import type { PieceLifecycle, TrackingMode } from "@/lib/gss-lock";
 import { Field, OpsSubmit } from "../../ops/ops-form";
+import { ItemPicker } from "../item-picker";
 
 type Item = {
   id: string;
   tracking_mode: TrackingMode;
   qty_on_hand: number;
-  product: { name: string; gid: string };
+  product: { name: string; gid: string; manufacturer?: string | null };
 };
 type Piece = { dm_code: string; item_id: string; lifecycle: PieceLifecycle };
 
@@ -41,15 +42,15 @@ export function IssueForm({ items, pieces }: { items: Item[]; pieces: Piece[] })
 
   return (
     <div className="grid gap-4">
-      <Field label="Položka">
-        <select className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm" value={itemId} onChange={(e) => { setItemId(e.target.value); setSelected([]); }}>
-          {items.map((it) => (
-            <option key={it.id} value={it.id}>
-              {it.product.name}{it.tracking_mode === "quantity" ? " · bez DM" : ""}
-            </option>
-          ))}
-        </select>
-      </Field>
+      <ItemPicker
+        items={items.map((it) => ({
+          id: it.id,
+          label: `${it.product.name} · ${it.product.gid}${it.tracking_mode === "quantity" ? " · bez DM" : ""}`,
+          keywords: it.product.manufacturer ?? "",
+        }))}
+        value={itemId}
+        onChange={(id) => { setItemId(id); setSelected([]); }}
+      />
 
       {/* Stroj / zakázka / středisko — audit výdeje (AT-016) */}
       <div className="grid gap-3 sm:grid-cols-3">

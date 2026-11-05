@@ -19,7 +19,17 @@ export interface LowStockItem {
   reorder_point: number | null;
   max_qty: number | null;
   suggested_qty: number;
+  /** suggested_qty zaokrouhlené nahoru na násobek pack_size */
+  order_qty: number;
+  pack_size: number | null;
+  supplier_primary: string | null;
   reason: "out_of_stock" | "below_reorder_point";
+}
+
+/** Zaokrouhlí navrhované množství nahoru na násobek balení. */
+export function roundToPack(qty: number, packSize: number | null): number {
+  if (!packSize || packSize <= 1) return qty;
+  return Math.ceil(qty / packSize) * packSize;
 }
 
 export async function computeLowStock(
@@ -29,7 +39,7 @@ export async function computeLowStock(
   const { data, error } = await sb
     .from("gss_items")
     .select(`
-      id, reorder_point, min_qty, max_qty,
+      id, reorder_point, min_qty, max_qty, pack_size, supplier_primary,
       tracking_mode, qty_on_hand, local_name, local_manufacturer, local_type,
       product:gpc_products(id, gid, type, name, manufacturer),
       pieces:gss_pieces!gss_pieces_item_id_fkey(id, status)
@@ -42,6 +52,8 @@ export async function computeLowStock(
     reorder_point: number | null;
     min_qty: number | null;
     max_qty: number | null;
+    pack_size: number | null;
+    supplier_primary: string | null;
     tracking_mode: string;
     qty_on_hand: number;
     local_name: string | null;
@@ -73,6 +85,9 @@ export async function computeLowStock(
       in_stock_qty: inStock, in_production_qty: inProd, in_service_qty: inSvc,
       min_qty: it.min_qty, reorder_point: it.reorder_point, max_qty: it.max_qty,
       suggested_qty: suggested,
+      order_qty: roundToPack(suggested, it.pack_size),
+      pack_size: it.pack_size,
+      supplier_primary: it.supplier_primary,
       reason: inStock === 0 ? "out_of_stock" : "below_reorder_point",
     });
   }

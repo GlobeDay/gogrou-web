@@ -68,7 +68,9 @@ export default async function ItemsPage() {
       <div className="flex items-baseline justify-between">
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold tracking-tight">Skladové karty</h1>
+          <Link href="/gss/search" className="text-sm underline">Hledat</Link>
           <Link href="/gss/terminal" className="text-sm underline">Terminál</Link>
+          <Link href="/gss/orders" className="text-sm underline">Objednávky</Link>
           <Link href="/gss/adopt" className="text-sm underline">Převzít z GPC</Link>
           <Link href="/gss/local-item" className="text-sm underline">Lokální položka</Link>
         </div>

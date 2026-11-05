@@ -44,6 +44,16 @@ export const TRACKING_MODE_LABELS = {
 
 export type TrackingMode = keyof typeof TRACKING_MODE_LABELS;
 
+export const ORDER_STATUS_LABELS = {
+  draft: "Koncept",
+  ordered: "Objednáno",
+  partially_received: "Částečně přijato",
+  received: "Přijato",
+  cancelled: "Zrušeno",
+} as const;
+
+export type OrderStatus = keyof typeof ORDER_STATUS_LABELS;
+
 export const SHIPMENT_STATUS_LABELS = {
   draft: "Koncept",
   sent_to_service: "Odesláno do servisu",
