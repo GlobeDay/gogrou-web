@@ -65,7 +65,9 @@ export async function loadGssContext(cap: Capability = "gss.transfer"): Promise<
 export function revalidateGss(itemId?: string) {
   if (itemId) revalidatePath(`/gss/item/${itemId}`);
   revalidatePath("/gss/items");
+  revalidatePath("/gss/orders");
   revalidatePath("/gss/audit");
+  revalidatePath("/gss/decisions");
   revalidatePath("/gss/low-stock");
   revalidatePath("/gss/terminal");
   revalidatePath("/gss/adopt");

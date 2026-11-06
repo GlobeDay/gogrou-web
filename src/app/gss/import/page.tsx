@@ -34,13 +34,16 @@ export default async function ImportPage() {
   // Items + locations pro picker
   const [itemsRes, locsRes] = await Promise.all([
     sb.from("gss_items")
-      .select(`id, product:gpc_products!inner(id, gid, type, name)`)
+      .select(`id, local_name, local_type, product:gpc_products(id, gid, type, name)`)
       .eq("tenant_id", tenantRow.id).limit(500),
     sb.from("gss_locations").select("code, name").eq("tenant_id", tenantRow.id).order("code"),
   ]);
 
   const items = (itemsRes.data ?? []).map((r: any) => ({
-    id: r.id, gid: r.product.gid, name: r.product.name, type: r.product.type,
+    id: r.id,
+    gid: r.product?.gid ?? "LOCAL",
+    name: r.product?.name ?? r.local_name ?? "(bez názvu)",
+    type: r.product?.type ?? r.local_type ?? "local",
   }));
   const locations = (locsRes.data ?? []) as Array<{ code: string; name: string }>;
 

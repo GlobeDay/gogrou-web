@@ -29,6 +29,31 @@ export const RETURN_DECISION_LABELS = {
 
 export type ReturnDecision = keyof typeof RETURN_DECISION_LABELS;
 
+export const CONDITION_LABELS = {
+  new: "Nový",
+  resharpened_new: "Nový přebroušený",
+  used: "Použitý",
+} as const;
+
+export type PieceCondition = keyof typeof CONDITION_LABELS;
+
+export const TRACKING_MODE_LABELS = {
+  quantity: "Množstevní (bez DM)",
+  dm: "DM/QID sledování",
+} as const;
+
+export type TrackingMode = keyof typeof TRACKING_MODE_LABELS;
+
+export const ORDER_STATUS_LABELS = {
+  draft: "Koncept",
+  ordered: "Objednáno",
+  partially_received: "Částečně přijato",
+  received: "Přijato",
+  cancelled: "Zrušeno",
+} as const;
+
+export type OrderStatus = keyof typeof ORDER_STATUS_LABELS;
+
 export const SHIPMENT_STATUS_LABELS = {
   draft: "Koncept",
   sent_to_service: "Odesláno do servisu",
@@ -44,6 +69,13 @@ export const SHIPMENT_STATUS_LABELS = {
 } as const;
 
 export type ShipmentStatus = keyof typeof SHIPMENT_STATUS_LABELS;
+
+export const SHIPMENT_DIRECTION_LABELS = {
+  to_service: "Do brusírny",
+  return: "Návrat zákazníkovi",
+} as const;
+
+export type ShipmentDirection = keyof typeof SHIPMENT_DIRECTION_LABELS;
 
 export type PieceLifecycle = {
   sharpening?: {
@@ -70,17 +102,6 @@ export type PieceLifecycle = {
   condition?: "new" | "resharpened_new" | "used";
 };
 
-export type ServiceShipment = {
-  id: string;
-  number: string;
-  status: ShipmentStatus;
-  customer: string;
-  order: string;
-  partner: string;
-  items: Array<{ dm_code: string; note?: string }>;
-  updated_at: string;
-};
-
 export type OverstockOffer = {
   item_id: string;
   qty: number;
@@ -103,6 +124,20 @@ export function mergeLifecycle(current: unknown, patch: PieceLifecycle): PieceLi
       ? { ...base.reservation, ...patch.reservation }
       : base.reservation,
   };
+}
+
+/**
+ * Lifecycle pro nově přijatý kus: z posledního sourozence se smí zdědit jen
+ * konfigurace (max_cycles, instrukce) — nikdy rezervace, QID, kondice ani blokace.
+ */
+export function inheritLifecycle(sibling: unknown): PieceLifecycle {
+  const base = asLifecycle(sibling) as PieceLifecycle & { instructions?: unknown };
+  const out: PieceLifecycle & { instructions?: unknown } = {};
+  if (base.sharpening?.max_cycles !== undefined) {
+    out.sharpening = { max_cycles: base.sharpening.max_cycles };
+  }
+  if (base.instructions !== undefined) out.instructions = base.instructions;
+  return out;
 }
 
 export function newReleaseCode(): string {

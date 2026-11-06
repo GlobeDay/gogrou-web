@@ -323,6 +323,30 @@ erDiagram
 | **`gss_pieces`** | 54 | Fyzický kus s DataMatrix kódem. Status = lifecycle. | UQ `(tenant_id, dm_code)`, `lifecycle jsonb` |
 | **`gss_movements`** | 96 | Append-only audit log pohybů. | `(tenant_id, occurred_at DESC)` idx |
 
+### 4.2b Iterace 11/2026 — rozšíření po acceptance testu (3. 10. 2026)
+
+Nové sloupce:
+
+| Tabulka | Sloupce | Účel |
+|---|---|---|
+| **`gss_pieces`** | `condition piece_condition NOT NULL DEFAULT 'new'`, `qid text` (UQ per tenant, partial) | Kondice oddělená od lokace/statusu; QID vzniká automaticky s DM kusem |
+| **`gss_items`** | `tracking_mode item_tracking_mode DEFAULT 'dm'`, `qty_on_hand int` (pro non-DM), `pack_size int`, `supplier_primary`, `supplier_secondary` | non-DM/DM režim per položka, balení, dodavatelé |
+| **`gss_items`** | `gpc_product_id` nyní **nullable** + `local_name`, `local_manufacturer`, `local_type`, `local_params jsonb` + CHECK `ck_item_identity` | LOCAL/UNVALIDATED položka žije jen v GSS (AT-006) |
+
+Nové tabulky (všechny tenant-scoped RLS `*_tenant_scope`):
+
+| Tabulka | Účel |
+|---|---|
+| **`gss_item_external_ids`** | Externí identifikátory položky (SAP/ERP/automat…): `system`, `value`, `source`, `active`; UQ `(tenant_id, system, value)`; mapovací vrstva zákazník ↔ GSS/GPC |
+| **`gss_orders`** + **`gss_order_lines`** | Systémové objednávky: `order_no` (UQ/tenant), `supplier`, `status gss_order_status`; řádky `qty_ordered` / `qty_received` → ordered/received/remaining |
+| **`gss_service_shipments`** + **`gss_service_shipment_lines`** | Servisní zásilky jako entita (dřív jen movement payload): `direction` (to_service/return), `status`, `partner`, `return_of` self-FK; řádky s `piece_id` (DM) nebo `item_id`+`qty` (non-DM), `result` |
+| **`gss_piece_service_events`** | Historie D/L1/L2 per servisní cyklus: `cycle_no`, `diameter_mm`, `l1_mm`, `l2_mm`, `performer`, `event_date`, FK `shipment_id` |
+| **`gss_gpc_validation_requests`** | Proces „Odeslat k ověření do GPC" pro lokální položky: `status` (pending/approved/rejected/linked), `attachments jsonb`, výsledný `gpc_product_id` |
+
+Rozšíření enumů (P4): `piece_status` dostal hodnotu **`awaiting_decision`** — kus po návratu
+z výroby čeká v rozhodovací frontě (`/gss/decisions`); rozhodnutí spouští workflow.
+Migrace: `ALTER TYPE piece_status ADD VALUE IF NOT EXISTS 'awaiting_decision' AFTER 'in_production';`
+
 ### 4.3 Auth vrstva
 
 | Tabulka | Řádků | Účel | Klíčové sloupce |
@@ -334,10 +358,14 @@ erDiagram
 ## 5. Enums
 
 ```sql
-entity_status   = active | phasing_out | discontinued
-piece_status    = new | in_stock | in_preset | in_machine | in_production | in_service | scrapped
-movement_type   = receive | issue | transfer | service_out | service_in | scrap | adjust
-tenant_role     = viewer | operator | supervisor | admin
+entity_status      = active | phasing_out | discontinued
+piece_status       = new | in_stock | in_preset | in_machine | in_production | awaiting_decision | in_service | scrapped
+piece_condition    = new | resharpened_new | used
+item_tracking_mode = quantity | dm
+movement_type      = receive | issue | transfer | service_out | service_in | scrap | adjust
+gss_order_status   = draft | ordered | partially_received | received | cancelled
+shipment_direction = to_service | return
+tenant_role        = viewer | operator | supervisor | admin
 ```
 
 **Role capability matrix** (vynucováno v `src/lib/tenant.ts`):
@@ -358,6 +386,7 @@ tenant_role     = viewer | operator | supervisor | admin
 | Funkce | Návrat | Účel |
 |---|---|---|
 | `gpc_search(p_type, p_status, p_text, p_filters jsonb, p_sort jsonb, p_limit, p_offset)` | `setof record` | Univerzální full-text + JSONB filter search nad `gpc_products`. Podporuje ops `eq/neq/gte/lte/gt/lt/like/in`. Vrací `total_count` v každém řádku (window). |
+| `gpc_search_params(p_text, p_limit)` | `table(id, gid, gtin, type, name, manufacturer, match_key_value)` | Substring hledání v JSONB `params` (`params::text ILIKE`), podpořené trigram indexem `gin_gpc_params_trgm` (pg_trgm). Používá `/api/gss/search` pro P2 univerzální hledání. |
 | `gss_user_tenant_ids()` | `setof uuid` | **RLS helper.** Vrací všechny `tenant_id`, ke kterým má current `auth.uid()` přístup. SECURITY DEFINER. |
 | `gss_user_role_in(p_tenant uuid)` | `tenant_role` | Vrací roli usera v daném tenantovi (NULL pokud nemá). |
 | `gss_user_is_global_admin()` | `boolean` | True jen pokud user je `admin` ve **všech** svých tenantech (= globální admin pro GPC writes). |
@@ -413,6 +442,22 @@ USING (id IN (SELECT gss_user_tenant_ids()))
 USING (user_id = auth.uid())
 -- WRITE: spravuje se centrálně, RLS WRITE policy nedefinována → no public write
 ```
+
+### 8.5 AT-003 tenant-boundary test
+
+Opakovatelný skript: `scripts/at003-tenant-boundary.sql` (simulace uživatele přes
+`SET LOCAL ROLE authenticated` + `request.jwt.claims`, write-proby v transakci
+s rollbackem). Naposledy provedeno **6. 11. 2026** nad tenanty DEV01/ARGO/METROVA
+— vše PASS:
+
+| Kontrola | Výsledek |
+|---|---|
+| Čtení: single-tenant uživatel (DEV01 operator, ARGO viewer) | vidí přesně baseline svého tenanta, cizí tenanty 0 řádků |
+| Čtení: multi-tenant uživatel (DEV01+METROVA) | vidí oba své tenanty, třetí tenant 0 řádků |
+| Sdílený katalog `gpc_products` | čitelný všem autentizovaným (6483 řádků) |
+| `gss_tenants` | uživatel vidí jen své tenanty |
+| Cross-tenant INSERT do `gss_items` | blokován RLS (42501) |
+| Cross-tenant UPDATE `gss_items` | 0 řádků (RLS USING odfiltruje) |
 
 ---
 

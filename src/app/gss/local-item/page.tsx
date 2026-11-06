@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function LocalItemPage() {
   const user = await getServerUser();
   if (!user) redirect("/login?next=/gss/local-item");
-  const isAdmin = await can("gpc.edit");
+  const canCreate = await can("gss.edit_lifecycle");
 
   return (
     <div className="mx-auto max-w-xl px-4 py-6 space-y-4">
@@ -18,15 +18,16 @@ export default async function LocalItemPage() {
         <ArrowLeft className="h-4 w-4 mr-1" /> Terminál
       </Link>
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Lokální nevalidovaná položka</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Lokální položka (jen v GSS)</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Vytvoří GPC kartu typu local.unvalidated a skladovou kartu tenanta. Jen admin.
+          Vytvoří skladovou kartu jen v GSS tenanta — do sdíleného katalogu GPC nic nezapisuje.
+          O zařazení do GPC lze později požádat z karty položky.
         </p>
       </div>
-      {isAdmin ? (
+      {canCreate ? (
         <LocalItemForm />
       ) : (
-        <p className="text-sm text-muted-foreground">Tuto akci může provést jen global admin (zápis do GPC).</p>
+        <p className="text-sm text-muted-foreground">Tuto akci může provést supervisor a vyšší.</p>
       )}
     </div>
   );

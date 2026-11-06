@@ -31,10 +31,10 @@ export interface ScanResponse {
     lifecycle: Record<string, unknown>;
   };
   product: {
-    gpc_product_id: string; gid: string; type: string;
+    gpc_product_id: string | null; gid: string; type: string;
     name: string; manufacturer: string | null;
-    params: Record<string, unknown>;
-    external_refs: Record<string, unknown>;
+    params: Record<string, unknown> | null;
+    external_refs: Record<string, unknown> | null;
   } | null;
   next_action: {
     code: string; title: string;
@@ -51,6 +51,18 @@ export function scan(input: {
   event?: "RETURN_FROM_MACHINE" | "ISSUE_TO_MACHINE" | "RETURN_FROM_SERVICE" | "INSPECT";
 }) {
   return call<ScanResponse>("/api/gss/scan", { method: "POST", body: JSON.stringify(input) });
+}
+
+// ---------- GSS univerzální hledání ----------
+export interface GssSearchResponse {
+  items: Array<{ item_id: string; gid: string; name: string; manufacturer: string | null; type: string; is_local: boolean; via_params?: boolean }>;
+  catalog: Array<{ product_id: string; gid: string; name: string; manufacturer: string | null; type: string; via_params?: boolean }>;
+  pieces: Array<{ dm_code: string; qid: string | null; status: string; item_id: string; name: string }>;
+  external: Array<{ system: string; value: string; item_id: string; name: string }>;
+}
+
+export function searchGss(q: string) {
+  return call<GssSearchResponse>(`/api/gss/search?q=${encodeURIComponent(q)}`);
 }
 
 // ---------- GSS move ----------

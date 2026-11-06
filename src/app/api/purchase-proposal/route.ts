@@ -65,16 +65,16 @@ export async function GET(req: NextRequest) {
   ].join("\r\n");
 
   const headers = [
-    "GID","Type","Name","Manufacturer",
+    "GID","Type","Name","Manufacturer","Supplier",
     "In stock","In machine","In service",
     "Min qty","Reorder point","Max qty",
-    "Suggested qty","Reason",
+    "Suggested qty","Pack size","Order qty","Reason",
   ];
   const rows = items.map((i) => [
-    i.gid, i.type, i.name, i.manufacturer ?? "",
+    i.gid, i.type, i.name, i.manufacturer ?? "", i.supplier_primary ?? "",
     i.in_stock_qty, i.in_production_qty, i.in_service_qty,
     i.min_qty ?? "", i.reorder_point ?? "", i.max_qty ?? "",
-    i.suggested_qty, i.reason,
+    i.suggested_qty, i.pack_size ?? "", i.order_qty, i.reason,
   ]);
   const csv = [headers, ...rows].map((row) =>
     row.map((cell) => {

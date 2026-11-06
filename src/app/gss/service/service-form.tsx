@@ -15,21 +15,44 @@ type Piece = {
   lifecycle: PieceLifecycle;
 };
 
+function sharpeningFields(piece: Piece | undefined) {
+  const sh = piece?.lifecycle.sharpening;
+  return {
+    diameter: String(sh?.diameter_mm ?? ""),
+    l1: String(sh?.l1_mm ?? ""),
+    l2: String(sh?.l2_mm ?? ""),
+    performer: sh?.performer ?? "M-technologies",
+    date: sh?.date ?? new Date().toISOString().slice(0, 10),
+    notes: sh?.notes ?? "",
+  };
+}
+
 export function ServiceForm({ pieces }: { pieces: Piece[] }) {
   const [dm, setDm] = useState(pieces[0]?.dm_code ?? "");
   const selected = useMemo(() => pieces.find((p) => p.dm_code === dm), [pieces, dm]);
-  const sh = selected?.lifecycle.sharpening;
-  const [diameter, setDiameter] = useState(String(sh?.diameter_mm ?? ""));
-  const [l1, setL1] = useState(String(sh?.l1_mm ?? ""));
-  const [l2, setL2] = useState(String(sh?.l2_mm ?? ""));
-  const [performer, setPerformer] = useState(sh?.performer ?? "M-technologies");
-  const [date, setDate] = useState(sh?.date ?? new Date().toISOString().slice(0, 10));
-  const [notes, setNotes] = useState(sh?.notes ?? "");
+  const initial = sharpeningFields(pieces[0]);
+  const [diameter, setDiameter] = useState(initial.diameter);
+  const [l1, setL1] = useState(initial.l1);
+  const [l2, setL2] = useState(initial.l2);
+  const [performer, setPerformer] = useState(initial.performer);
+  const [date, setDate] = useState(initial.date);
+  const [notes, setNotes] = useState(initial.notes);
+
+  function selectDm(code: string) {
+    setDm(code);
+    const f = sharpeningFields(pieces.find((p) => p.dm_code === code));
+    setDiameter(f.diameter);
+    setL1(f.l1);
+    setL2(f.l2);
+    setPerformer(f.performer);
+    setDate(f.date);
+    setNotes(f.notes);
+  }
 
   return (
     <div className="grid gap-3">
       <Field label="DM / QID">
-        <select className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm" value={dm} onChange={(e) => setDm(e.target.value)}>
+        <select className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm" value={dm} onChange={(e) => selectDm(e.target.value)}>
           {pieces.map((p) => (
             <option key={p.dm_code} value={p.dm_code}>
               {p.dm_code}{p.lifecycle.qid ? ` · ${p.lifecycle.qid}` : ""} · {p.status}
