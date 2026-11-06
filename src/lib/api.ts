@@ -55,8 +55,8 @@ export function scan(input: {
 
 // ---------- GSS univerzální hledání ----------
 export interface GssSearchResponse {
-  items: Array<{ item_id: string; gid: string; name: string; manufacturer: string | null; type: string; is_local: boolean }>;
-  catalog: Array<{ product_id: string; gid: string; name: string; manufacturer: string | null; type: string }>;
+  items: Array<{ item_id: string; gid: string; name: string; manufacturer: string | null; type: string; is_local: boolean; via_params?: boolean }>;
+  catalog: Array<{ product_id: string; gid: string; name: string; manufacturer: string | null; type: string; via_params?: boolean }>;
   pieces: Array<{ dm_code: string; qid: string | null; status: string; item_id: string; name: string }>;
   external: Array<{ system: string; value: string; item_id: string; name: string }>;
 }

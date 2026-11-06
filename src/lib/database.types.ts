@@ -1204,12 +1204,26 @@ export type Database = {
           type: string
         }[]
       }
+      gpc_search_params: {
+        Args: { p_limit?: number; p_text: string }
+        Returns: {
+          gid: string
+          gtin: string
+          id: string
+          manufacturer: string
+          match_key_value: string
+          name: string
+          type: string
+        }[]
+      }
       gss_user_is_global_admin: { Args: never; Returns: boolean }
       gss_user_role_in: {
         Args: { p_tenant: string }
         Returns: Database["public"]["Enums"]["tenant_role"]
       }
       gss_user_tenant_ids: { Args: never; Returns: string[] }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       entity_status: "active" | "phasing_out" | "discontinued"

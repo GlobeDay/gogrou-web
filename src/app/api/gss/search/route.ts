@@ -6,7 +6,8 @@ import { getActiveTenant } from "@/lib/tenant";
  * GET /api/gss/search?q=…
  * Univerzální hledání (P2 akceptačního reportu): název / výrobce / GID /
  * GTIN / objednací číslo (match_key_value) / DM / QID / externí identifikátory
- * / lokální položky. Tenant-scoped přes session → RLS.
+ * / lokální položky / JSONB parametry GPC (RPC gpc_search_params).
+ * Tenant-scoped přes session → RLS.
  */
 export async function GET(req: NextRequest) {
   const user = await getServerUser();
@@ -27,12 +28,13 @@ export async function GET(req: NextRequest) {
   if (needle.length < 2) return NextResponse.json(empty);
   const pat = `*${needle}*`;
 
-  const [productsRes, localRes, piecesRes, externalRes] = await Promise.all([
+  const [productsRes, paramsRes, localRes, piecesRes, externalRes] = await Promise.all([
     sb
       .from("gpc_products")
       .select("id, gid, gtin, type, name, manufacturer, match_key_value")
       .or(`name.ilike.${pat},manufacturer.ilike.${pat},gid.ilike.${pat},gtin.ilike.${pat},match_key_value.ilike.${pat}`)
       .limit(25),
+    sb.rpc("gpc_search_params", { p_text: needle, p_limit: 25 }),
     sb
       .from("gss_items")
       .select("id, local_name, local_manufacturer, local_type")
@@ -54,10 +56,17 @@ export async function GET(req: NextRequest) {
       .or(`value.ilike.${pat},system.ilike.${pat}`)
       .limit(25),
   ]);
-  const err = productsRes.error ?? localRes.error ?? piecesRes.error ?? externalRes.error;
+  const err = productsRes.error ?? paramsRes.error ?? localRes.error ?? piecesRes.error ?? externalRes.error;
   if (err) return NextResponse.json({ error: err.message }, { status: 500 });
 
-  const products = productsRes.data ?? [];
+  // Shody z JSONB parametrů přidat k textovým shodám (dedup podle id)
+  const textIds = new Set((productsRes.data ?? []).map((p) => p.id));
+  const products = [
+    ...(productsRes.data ?? []).map((p) => ({ ...p, via_params: false })),
+    ...(paramsRes.data ?? [])
+      .filter((p) => !textIds.has(p.id))
+      .map((p) => ({ ...p, via_params: true })),
+  ];
   const productIds = products.map((p) => p.id);
   const { data: adoptedRows } = productIds.length
     ? await sb.from("gss_items").select("id, gpc_product_id").eq("tenant_id", tid).in("gpc_product_id", productIds)
@@ -87,6 +96,7 @@ export async function GET(req: NextRequest) {
           manufacturer: p.manufacturer,
           type: p.type,
           is_local: false,
+          via_params: p.via_params,
         })),
       ...(localRes.data ?? []).map((it) => ({
         item_id: it.id,
@@ -99,7 +109,14 @@ export async function GET(req: NextRequest) {
     ],
     catalog: products
       .filter((p) => !adopted.has(p.id))
-      .map((p) => ({ product_id: p.id, gid: p.gid, name: p.name, manufacturer: p.manufacturer, type: p.type })),
+      .map((p) => ({
+        product_id: p.id,
+        gid: p.gid,
+        name: p.name,
+        manufacturer: p.manufacturer,
+        type: p.type,
+        via_params: p.via_params,
+      })),
     pieces: ((piecesRes.data ?? []) as unknown as PieceJoin[]).map((p) => ({
       dm_code: p.dm_code,
       qid: p.qid,

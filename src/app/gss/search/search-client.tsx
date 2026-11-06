@@ -54,7 +54,7 @@ export function SearchClient({ initialQuery }: { initialQuery: string }) {
         <Input
           autoFocus
           className="pl-9"
-          placeholder="Název, výrobce, obj. číslo, GID, GTIN, QID, DM, externí ID…"
+          placeholder="Název, výrobce, obj. číslo, GID, GTIN, QID, DM, externí ID, parametry…"
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
@@ -75,6 +75,7 @@ export function SearchClient({ initialQuery }: { initialQuery: string }) {
                   <div className="font-medium">
                     {it.name}
                     {it.is_local && <Badge variant="destructive" className="ml-2 text-2xs">LOKÁLNÍ</Badge>}
+                    {it.via_params && <Badge variant="secondary" className="ml-2 text-2xs">parametr</Badge>}
                   </div>
                   <div className="font-mono text-xs text-muted-foreground">{it.gid}{it.manufacturer ? ` · ${it.manufacturer}` : ""}</div>
                 </div>
@@ -128,7 +129,10 @@ export function SearchClient({ initialQuery }: { initialQuery: string }) {
             {result.catalog.map((p) => (
               <Link key={p.product_id} href={`/gpc/${p.product_id}`} className="flex items-center justify-between gap-3 py-2 hover:bg-accent/40 -mx-2 px-2 rounded">
                 <div>
-                  <div className="font-medium">{p.name}</div>
+                  <div className="font-medium">
+                    {p.name}
+                    {p.via_params && <Badge variant="secondary" className="ml-2 text-2xs">parametr</Badge>}
+                  </div>
                   <div className="font-mono text-xs text-muted-foreground">{p.gid}{p.manufacturer ? ` · ${p.manufacturer}` : ""}</div>
                 </div>
                 <Badge variant="outline" className="font-mono text-xs shrink-0">{p.type}</Badge>

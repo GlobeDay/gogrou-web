@@ -386,6 +386,7 @@ tenant_role        = viewer | operator | supervisor | admin
 | Funkce | Návrat | Účel |
 |---|---|---|
 | `gpc_search(p_type, p_status, p_text, p_filters jsonb, p_sort jsonb, p_limit, p_offset)` | `setof record` | Univerzální full-text + JSONB filter search nad `gpc_products`. Podporuje ops `eq/neq/gte/lte/gt/lt/like/in`. Vrací `total_count` v každém řádku (window). |
+| `gpc_search_params(p_text, p_limit)` | `table(id, gid, gtin, type, name, manufacturer, match_key_value)` | Substring hledání v JSONB `params` (`params::text ILIKE`), podpořené trigram indexem `gin_gpc_params_trgm` (pg_trgm). Používá `/api/gss/search` pro P2 univerzální hledání. |
 | `gss_user_tenant_ids()` | `setof uuid` | **RLS helper.** Vrací všechny `tenant_id`, ke kterým má current `auth.uid()` přístup. SECURITY DEFINER. |
 | `gss_user_role_in(p_tenant uuid)` | `tenant_role` | Vrací roli usera v daném tenantovi (NULL pokud nemá). |
 | `gss_user_is_global_admin()` | `boolean` | True jen pokud user je `admin` ve **všech** svých tenantech (= globální admin pro GPC writes). |
@@ -441,6 +442,22 @@ USING (id IN (SELECT gss_user_tenant_ids()))
 USING (user_id = auth.uid())
 -- WRITE: spravuje se centrálně, RLS WRITE policy nedefinována → no public write
 ```
+
+### 8.5 AT-003 tenant-boundary test
+
+Opakovatelný skript: `scripts/at003-tenant-boundary.sql` (simulace uživatele přes
+`SET LOCAL ROLE authenticated` + `request.jwt.claims`, write-proby v transakci
+s rollbackem). Naposledy provedeno **6. 11. 2026** nad tenanty DEV01/ARGO/METROVA
+— vše PASS:
+
+| Kontrola | Výsledek |
+|---|---|
+| Čtení: single-tenant uživatel (DEV01 operator, ARGO viewer) | vidí přesně baseline svého tenanta, cizí tenanty 0 řádků |
+| Čtení: multi-tenant uživatel (DEV01+METROVA) | vidí oba své tenanty, třetí tenant 0 řádků |
+| Sdílený katalog `gpc_products` | čitelný všem autentizovaným (6483 řádků) |
+| `gss_tenants` | uživatel vidí jen své tenanty |
+| Cross-tenant INSERT do `gss_items` | blokován RLS (42501) |
+| Cross-tenant UPDATE `gss_items` | 0 řádků (RLS USING odfiltruje) |
 
 ---
 
